@@ -1,4 +1,23 @@
 services:
+  postgres:
+    image: 'postgres:latest'
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: file_metadata
+
+  adminer:
+    image: adminer
+    ports:
+      - 8080:8080
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+      ADMINER_DESIGN: bilal-dark
+    depends_on:
+      - postgres
+
   zookeeper:
     image: confluentinc/cp-zookeeper:7.3.2
     environment:
@@ -22,9 +41,22 @@ services:
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
+    healthcheck:
+      test: [ "CMD-SHELL", "/bin/kafka-cluster cluster-id --bootstrap-server kafka:9092 || exit 1" ]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
   file_receiver:
-    build: /FileReceiver
+    build: ./FileReceiver
     ports:
       - "8000:8000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
   file_distributor:
-    build: /FileDistributor
+    build: ./FileDistributor
+    depends_on:
+      kafka:
+        condition: service_healthy
