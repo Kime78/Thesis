@@ -1,3 +1,11 @@
-kafka-python==2.0.5
-peewee==3.17.9
-psycopg2==2.9.10
+aiokafka==0.12.0
+async-timeout==5.0.1
+asyncpg==0.30.0
+databases==0.9.0
+greenlet==3.1.1
+grpcio==1.71.0
+grpcio-tools==1.71.0
+packaging==24.2
+protobuf==5.29.3
+SQLAlchemy==2.0.39
+typing_extensions==4.12.2

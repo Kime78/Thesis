@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: 'postgres:latest'
+    image: "postgres:latest"
     ports:
       - 5432:5432
     environment:
@@ -42,7 +42,11 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
 
     healthcheck:
-      test: [ "CMD-SHELL", "/bin/kafka-cluster cluster-id --bootstrap-server kafka:9092 || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "/bin/kafka-cluster cluster-id --bootstrap-server kafka:9092 || exit 1",
+        ]
       interval: 2s
       timeout: 2s
       retries: 15
@@ -60,3 +64,36 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+
+  storage-node1:
+    build: ./StorageNode
+    ports:
+      - "50051:50051"
+    volumes:
+      - ./node1_chunks:/chunks
+
+  storage-node2:
+    build: ./StorageNode
+    ports:
+      - "50052:50051"
+    volumes:
+      - ./node2_chunks:/chunks
+
+  storage-node3:
+    build: ./StorageNode
+    ports:
+      - "50053:50051"
+    volumes:
+      - ./node3_chunks:/chunks
+  storage-node4:
+    build: ./StorageNode
+    ports:
+      - "50054:50051"
+    volumes:
+      - ./node4_chunks:/chunks
+
+volumes:
+  node1_chunks:
+  node2_chunks:
+  node3_chunks:
+  node4_chunks:

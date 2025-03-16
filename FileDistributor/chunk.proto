@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package dfs;
+
+service ChunkService {
+  // Unary RPC for single chunk
+  rpc StoreChunk(Chunk) returns (StoreResponse) {};
+  
+  // Client-side streaming for batches
+  rpc StoreChunkStream(stream Chunk) returns (StoreResponse) {};
+}
+
+message Chunk {
+  string id = 1;
+  bytes data = 2;
+}
+
+message StoreResponse {
+  bool success = 1;
+  string message = 2;
+}
