@@ -9,6 +9,7 @@ import chunk_pb2
 import chunk_pb2_grpc
 import logging
 from database import create_tables, file_metadata, database
+import os
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,6 +25,8 @@ nodes = [
 ]
 
 rr = 0
+
+logger.info(f"GOT REPLICATION FACTOR = {os.getenv("REPLICATION_FACTOR", "3")}")
 
 def parse_received_data(received_data: bytes):
         """Parse Kafka message into metadata and chunk"""
@@ -52,35 +55,36 @@ async def process_message(message, db):
     metadata, chunk = parse_received_data(message.value)
     global rr
     global nodes
-    metadata["storage_node"] = nodes[rr] 
-    rr = (rr + 1) % len(nodes)
-    logger.info(f"Chosen storage node: {metadata["storage_node"]}")
-    # Save initial metadata with "pending" status
-    metadata["status"] = "pending"
-    metadata["stored_at"] = None
+    for replica in range(0, int(os.getenv("REPLICATION_FACTOR", "3"))):
+        metadata["storage_node"] = nodes[rr] 
+        rr = (rr + 1) % len(nodes)
+        logger.info(f"Chosen storage node: {metadata["storage_node"]}")
+        # Save initial metadata with "pending" status
+        metadata["status"] = "pending"
+        metadata["stored_at"] = None
 
-    query = file_metadata.insert().values(**metadata)
-    await db.execute(query)
-    
-    try:
-        # Send to storage node
-        m = base64.b64encode(json.dumps(metadata).encode()).decode()
-        chunk_with_metadata = f"{m}\n\n----METADATA----\n\n".encode() + chunk
-        await send_to_storage_node(chunk_with_metadata)
-        logger.info("Am ajuns aici 1")
-        # Update status to "stored"
-        query = file_metadata.update() \
-            .where(file_metadata.c.chunk_uuid == metadata["chunk_uuid"]) \
-            .values(status="stored", stored_at=datetime.utcnow())
+        query = file_metadata.insert().values(**metadata)
         await db.execute(query)
         
-    except Exception as e:
-        # Update status to "failed"
-        query = file_metadata.update() \
-            .where(file_metadata.c.chunk_uuid == metadata["chunk_uuid"]) \
-            .values(status=f"failed: {str(e)}")
-        await db.execute(query)
-        raise
+        try:
+            # Send to storage node
+            m = base64.b64encode(json.dumps(metadata).encode()).decode()
+            chunk_with_metadata = f"{m}\n\n----METADATA----\n\n".encode() + chunk
+            await send_to_storage_node(chunk_with_metadata)
+            logger.info("Am ajuns aici 1")
+            # Update status to "stored"
+            query = file_metadata.update() \
+                .where(file_metadata.c.chunk_uuid == metadata["chunk_uuid"]) \
+                .values(status="stored", stored_at=datetime.now())
+            await db.execute(query)
+            
+        except Exception as e:
+            # Update status to "failed"
+            query = file_metadata.update() \
+                .where(file_metadata.c.chunk_uuid == metadata["chunk_uuid"]) \
+                .values(status=f"failed: {str(e)}")
+            await db.execute(query)
+            raise
 
 async def main():
     await database.connect()

@@ -61,6 +61,8 @@ services:
 
   file_distributor:
     build: ./FileDistributor
+    environment:
+      - REPLICATION_FACTOR=4
     depends_on:
       kafka:
         condition: service_healthy
@@ -91,6 +93,14 @@ services:
       - "50054:50051"
     volumes:
       - ./node4_chunks:/chunks
+
+  kafka-ui:
+    container_name: kafka-ui
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - 8081:8080
+    environment:
+      DYNAMIC_CONFIG_ENABLED: "true"
 
 volumes:
   node1_chunks:

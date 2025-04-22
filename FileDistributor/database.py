@@ -23,7 +23,7 @@ file_metadata = Table(
     Column("file_name", String),
     Column("file_size", Integer),
     Column("content_type", String),
-    Column("chunk_uuid", String, unique=True),
+    Column("chunk_uuid", String),
     Column("chunk_index", Integer),
     Column("chunk_size", Integer),
     Column("storage_node", String),  # Added: e.g., "http://storage-node:50051"
