@@ -4,25 +4,38 @@ import os
 from uuid import uuid4
 import aiofiles
 from fastapi import FastAPI, UploadFile, HTTPException
-from kafka import KafkaProducer
+from aiokafka import AIOKafkaProducer
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-producer = KafkaProducer(
-    bootstrap_servers=['kafka:29092'],
-    value_serializer=lambda x: x
-)
-
 topic_name = 'file-chunks'
-CHUNK_SIZE = 1 * 1024 * 1024 // 2  # 500 KiB
+CHUNK_SIZE = 10 * 1024 * 1024  # 10 MiB
 
 app = FastAPI()
+producer: AIOKafkaProducer = None  # type: ignore
+
+@app.on_event("startup")
+async def startup_event():
+    global producer
+    producer = AIOKafkaProducer(
+        bootstrap_servers='kafka:29092',
+        value_serializer=lambda x: x,
+        max_request_size=15 * 1024 * 1024
+    )
+    await producer.start()
+    logger.info("AIOKafkaProducer started")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global producer
+    if producer:
+        await producer.stop()
+        logger.info("AIOKafkaProducer stopped")
 
 def create_metadata(file_name: str, content_type: str, file_size: int, 
                     chunk: bytes, chunk_index: int, chunk_uuid: str, file_uuid: str) -> str:
-    """Create base64-encoded metadata for chunk"""
     metadata = {
         "file_size": file_size,
         "file_name": file_name,
@@ -54,9 +67,8 @@ async def upload_file(uploaded_file: UploadFile):
 
         file_size = os.path.getsize(temp_file_path)
 
-        futures = []
+        chunk_index = 0
         async with aiofiles.open(temp_file_path, "rb") as file:
-            chunk_index = 0
             while True:
                 chunk = await file.read(CHUNK_SIZE)
                 if not chunk:
@@ -73,15 +85,13 @@ async def upload_file(uploaded_file: UploadFile):
                 )
 
                 chunk_with_metadata = f"{metadata}\n\n----METADATA----\n\n".encode() + chunk
-                futures.append(producer.send(topic_name, value=chunk_with_metadata))
-                chunk_index += 1
+                try:
+                    await producer.send_and_wait(topic_name, value=chunk_with_metadata)
+                except Exception as e:
+                    logger.error(f"Failed to send chunk: {e}")
+                    raise HTTPException(status_code=500, detail=f"Kafka error: {e}")
 
-        for future in futures:
-            try:
-                future.get(timeout=10)
-            except Exception as e:
-                logger.error(f"Failed to send chunk: {e}")
-                raise HTTPException(status_code=500, detail=f"Kafka error: {e}")
+                chunk_index += 1
 
         return {
             "filename": file_name,
