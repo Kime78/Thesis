@@ -2,10 +2,11 @@ import asyncio
 import base64
 import json
 import os
-from typing import List
+from typing import Annotated, List
 from uuid import uuid4
 import aiofiles
 from fastapi import FastAPI, UploadFile, HTTPException, File
+from fastapi.responses import FileResponse
 from aiokafka import AIOKafkaProducer
 import logging
 from fastapi.middleware.cors import CORSMiddleware
@@ -56,6 +57,10 @@ def create_metadata(file_name: str, content_type: str, file_size: int,
         "file_uuid": file_uuid,
     }
     return base64.b64encode(json.dumps(metadata).encode()).decode()
+
+@app.post("/download")
+async def download_files():
+    return FileResponse("test.pdf")
 
 @app.post("/upload")
 async def upload_files(uploaded_files: List[UploadFile] = File(...)):
