@@ -1,20 +1,24 @@
 import asyncio
 import base64
 import json
-import os
-from typing import Annotated, List
-from uuid import uuid4
-import aiofiles
-from fastapi import FastAPI, UploadFile, HTTPException, File
-from fastapi.responses import FileResponse
-from aiokafka import AIOKafkaProducer
 import logging
+import os
+from typing import List, T
+from uuid import uuid4
+
+import aiofiles
+from aiokafka import AIOKafkaProducer
+from fastapi import FastAPI, UploadFile, File, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from sqlmodel import select
+
+from db import async_session, engine
+from model import FileMetadata
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-topic_name = 'file-chunks'
+topic_name = "file-chunks"
 CHUNK_SIZE = 10 * 1024 * 1024  # 10 MiB
 
 app = FastAPI()
@@ -27,16 +31,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 @app.on_event("startup")
 async def startup_event():
     global producer
     producer = AIOKafkaProducer(
-        bootstrap_servers='kafka:29092',
+        bootstrap_servers="kafka:29092",
         value_serializer=lambda x: x,
-        max_request_size=15 * 1024 * 1024
+        max_request_size=15 * 1024 * 1024,
     )
     await producer.start()
     logger.info("AIOKafkaProducer started")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -45,8 +51,16 @@ async def shutdown_event():
         await producer.stop()
         logger.info("AIOKafkaProducer stopped")
 
-def create_metadata(file_name: str, content_type: str, file_size: int, 
-                    chunk: bytes, chunk_index: int, chunk_uuid: str, file_uuid: str) -> str:
+
+def create_metadata(
+        file_name: str,
+        content_type: str,
+        file_size: int,
+        chunk: bytes,
+        chunk_index: int,
+        chunk_uuid: str,
+        file_uuid: str,
+) -> str:
     metadata = {
         "file_size": file_size,
         "file_name": file_name,
@@ -58,9 +72,15 @@ def create_metadata(file_name: str, content_type: str, file_size: int,
     }
     return base64.b64encode(json.dumps(metadata).encode()).decode()
 
-@app.post("/download")
-async def download_files():
-    return FileResponse("test.pdf")
+
+@app.post("/download", response_model=List[FileMetadata])
+async def download_files(file_uuid: str):
+    async with async_session() as session:
+        stmt = select(FileMetadata).where(FileMetadata.file_uuid == file_uuid)
+        result = await session.exec(stmt)
+        files = result.all()
+        return files
+
 
 @app.post("/upload")
 async def upload_files(uploaded_files: List[UploadFile] = File(...)):
@@ -72,7 +92,9 @@ async def upload_files(uploaded_files: List[UploadFile] = File(...)):
             content_type = uploaded_file.content_type
             file_name = uploaded_file.filename or "unknown_file"
 
-            async with aiofiles.tempfile.NamedTemporaryFile("wb", delete=False) as temp_file:
+            async with aiofiles.tempfile.NamedTemporaryFile(
+                    "wb", delete=False
+            ) as temp_file:
                 temp_file_path = temp_file.name
                 while True:
                     chunk = await uploaded_file.read(8192)
@@ -96,10 +118,12 @@ async def upload_files(uploaded_files: List[UploadFile] = File(...)):
                         chunk=chunk,
                         chunk_index=chunk_index,
                         chunk_uuid=str(uuid4()),
-                        file_uuid=file_uuid
+                        file_uuid=file_uuid,
                     )
 
-                    chunk_with_metadata = f"{metadata}\n\n----METADATA----\n\n".encode() + chunk
+                    chunk_with_metadata = (
+                            f"{metadata}\n\n----METADATA----\n\n".encode() + chunk
+                    )
 
                     await producer.send_and_wait(topic_name, value=chunk_with_metadata)
                     chunk_index += 1
@@ -108,7 +132,7 @@ async def upload_files(uploaded_files: List[UploadFile] = File(...)):
                 "filename": file_name,
                 "chunks_sent": chunk_index,
                 "file_uuid": file_uuid,
-                "message": "Processed in parallel"
+                "message": "Processed in parallel",
             }
 
         except Exception as e:

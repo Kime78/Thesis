@@ -9,6 +9,8 @@ database = Database(DATABASE_URL)
 metadata = MetaData()
 
 engine = create_async_engine(DATABASE_URL)
+
+
 async def create_tables():
     """Create tables if they don't exist"""
     async with engine.begin() as conn:
@@ -26,7 +28,7 @@ file_metadata = Table(
     Column("chunk_uuid", String),
     Column("chunk_index", Integer),
     Column("chunk_size", Integer),
-    Column("storage_node", String),  # Added: e.g., "http://storage-node:50051"
-    Column("stored_at", DateTime),   # Changed to DateTime
-    Column("status", String),        # "pending", "stored", "failed"
+    Column("storage_node", String),  # e.g., "http://storage-node:50051"
+    Column("stored_at", DateTime),
+    Column("status", String),
 )
