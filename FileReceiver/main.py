@@ -8,6 +8,7 @@ import aiofiles
 from fastapi import FastAPI, UploadFile, HTTPException, File
 from aiokafka import AIOKafkaProducer
 import logging
+from fastapi.middleware.cors import CORSMiddleware
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -17,6 +18,13 @@ CHUNK_SIZE = 10 * 1024 * 1024  # 10 MiB
 
 app = FastAPI()
 producer: AIOKafkaProducer = None  # type: ignore
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Replace with your frontend origin
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 async def startup_event():
