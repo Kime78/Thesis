@@ -3,6 +3,7 @@ import base64
 import json
 import logging
 import os
+import random
 from typing import List, T
 from uuid import uuid4
 
@@ -73,13 +74,23 @@ def create_metadata(
     return base64.b64encode(json.dumps(metadata).encode()).decode()
 
 
-@app.post("/download", response_model=List[FileMetadata])
+def choose_node(nodes: List[FileMetadata]) -> FileMetadata: 
+    return random.choice(nodes)
+
+@app.post("/download")
 async def download_files(file_uuid: str):
     async with async_session() as session:
-        stmt = select(FileMetadata).where(FileMetadata.file_uuid == file_uuid)
+        stmt = select(FileMetadata).where(FileMetadata.file_uuid == file_uuid).order_by(FileMetadata.chunk_index, FileMetadata.storage_node)
         result = await session.exec(stmt)
-        files = result.all()
-        return files
+        files = list(result.all())
+        # logger.info(files)
+        # 
+
+        grouped_files = [files[i:i + 4] for i in range(0, len(files), 4)]
+        chosen_files = [choose_node(inner) for inner in grouped_files]
+
+
+        return chosen_files
 
 
 @app.post("/upload")
