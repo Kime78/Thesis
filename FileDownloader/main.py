@@ -9,6 +9,7 @@ from fastapi import FastAPI, UploadFile, File, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlmodel import select
 from urllib.parse import quote
 
@@ -20,6 +21,10 @@ import chunk_pb2_grpc
 import grpc
 
 app = FastAPI()
+
+class DownloadRequest(BaseModel):
+    file_uuid: str
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -58,8 +63,17 @@ from fastapi import HTTPException
 import io
 import base64
 
+@app.get("/files")
+async def show_files():
+    async with async_session() as session:
+        stmt = select(FileMetadata).distinct(FileMetadata.file_uuid)
+        result = await session.exec(stmt)
+        files = list(result.all())
+    return files
+
 @app.post("/download")
-async def download_files(file_uuid: str):
+async def download_files(req: DownloadRequest):
+    file_uuid = req.file_uuid 
     async with async_session() as session:
         stmt = select(FileMetadata).where(FileMetadata.file_uuid == file_uuid).order_by(
             FileMetadata.chunk_index, FileMetadata.storage_node
