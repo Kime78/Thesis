@@ -77,21 +77,6 @@ def create_metadata(
 def choose_node(nodes: List[FileMetadata]) -> FileMetadata: 
     return random.choice(nodes)
 
-@app.post("/download")
-async def download_files(file_uuid: str):
-    async with async_session() as session:
-        stmt = select(FileMetadata).where(FileMetadata.file_uuid == file_uuid).order_by(FileMetadata.chunk_index, FileMetadata.storage_node)
-        result = await session.exec(stmt)
-        files = list(result.all())
-        # logger.info(files)
-        # 
-
-        grouped_files = [files[i:i + 4] for i in range(0, len(files), 4)]
-        chosen_files = [choose_node(inner) for inner in grouped_files]
-
-
-        return chosen_files
-
 
 @app.post("/upload")
 async def upload_files(uploaded_files: List[UploadFile] = File(...)):
@@ -135,7 +120,7 @@ async def upload_files(uploaded_files: List[UploadFile] = File(...)):
                     chunk_with_metadata = (
                             f"{metadata}\n\n----METADATA----\n\n".encode() + chunk
                     )
-
+                    
                     await producer.send_and_wait(topic_name, value=chunk_with_metadata)
                     chunk_index += 1
 

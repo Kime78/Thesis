@@ -1,0 +1,14 @@
+[Unit]
+Description=Storage Node
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/app
+ExecStart=/home/ubuntu/app/venv/bin/python main2.py
+Restart=always
+Environment=PATH=/home/ubuntu/app/venv/bin:/usr/bin:/bin
+Environment=VIRTUAL_ENV=/home/ubuntu/app/venv
+
+[Install]
+WantedBy=multi-user.target

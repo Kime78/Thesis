@@ -1,0 +1,55 @@
+#FIX THIS
+---
+- name: Deploy File Receivers
+  hosts: file_receivers
+
+  vars:
+    app_path: "/home/ubuntu/app"
+
+  tasks:
+    - name: Copy project files
+      ansible.builtin.copy:
+        src: ../FileReceiver/
+        dest: "{{ app_path }}"
+
+    - name: Install dependencies in virtual environment
+      ansible.builtin.pip:
+        requirements: /home/ubuntu/app/requirements.txt
+        virtualenv: /home/ubuntu/app/venv
+
+    # - name: Create systemd service for file distributor using venv
+    #   ansible.builtin.copy:
+    #     dest: /etc/systemd/system/file_receiver.service
+    #     content: |
+    #       [Unit]
+    #       Description=File Receiver
+    #       After=network.target
+
+    #       [Service]
+    #       User=ubuntu
+    #       WorkingDirectory=/opt/app/
+    #       ExecStart=/opt/local/bin/fastapi runmain.py
+    #       Restart=always
+    #       Environment=PATH=/opt/app/venv/bin:/usr/bin:/bin
+    #       Environment=VIRTUAL_ENV=/opt/app/venv
+
+    #       [Install]
+    #       WantedBy=multi-user.target
+    #   become: yes
+
+    - name: Copy systemd service file on the remote host
+      ansible.builtin.command: cp /home/ubuntu/app/file_receiver.service /etc/systemd/system/file_receiver.service
+      become: true
+
+
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+      become: true
+
+    - name: Enable and start service
+      ansible.builtin.systemd:
+        name: file_receiver
+        enabled: true
+        state: started
+      become: true

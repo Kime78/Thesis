@@ -1,0 +1,14 @@
+- hosts: kafka
+  tasks:
+  - name: Install Java (OpenJDK 11 - a common choice)
+    ansible.builtin.package:
+      name: openjdk-11-jdk
+      state: present
+    when: ansible_os_family == "Debian"
+
+  roles:
+    - sleighzy.kafka
+  vars:
+    kafka_socket_send_buffer_bytes: 20971520
+    kafka_socket_receive_buffer_bytes: 20971520
+    kafka_zookeeper_connect: zookeeper:2181

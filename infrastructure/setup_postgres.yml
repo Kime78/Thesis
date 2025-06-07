@@ -1,0 +1,31 @@
+---
+- name: Setup PostgreSQL
+  hosts: postgres
+  become: yes
+
+  vars:
+    postgresql_version: "14" # Adjust if needed
+
+  tasks:
+    - name: Install PostgreSQL
+      ansible.builtin.apt:
+        name: postgresql
+        state: present
+        update_cache: true
+
+    - name: Check if PostgreSQL cluster 'main' exists
+      ansible.builtin.command: "sudo -u postgres /usr/bin/pg_lsclusters"
+      register: pg_clusters
+      changed_when: false
+
+    # - name: Initialize PostgreSQL database if not already initialized
+    #   ansible.builtin.command: "sudo -u postgres /usr/bin/pg_createcluster {{ postgresql_version }} main"
+    #   args:
+    #     creates: "/var/lib/postgresql/{{ postgresql_version }}/main/PG_VERSION"
+    #   when: "'{{ postgresql_version }} main' not in pg_clusters.stdout"
+
+    - name: Enable and start PostgreSQL service
+      ansible.builtin.systemd:
+        name: postgresql
+        enabled: yes
+        state: started

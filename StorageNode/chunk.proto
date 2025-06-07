@@ -8,6 +8,8 @@ service ChunkService {
   
   // Client-side streaming for batches
   rpc StoreChunkStream(stream Chunk) returns (StoreResponse) {};
+
+  rpc GetChunk (ChunkRequest) returns (ChunkResponse);
 }
 
 message Chunk {
@@ -18,4 +20,13 @@ message Chunk {
 message StoreResponse {
   bool success = 1;
   string message = 2;
+}
+
+message ChunkRequest {
+  string chunk_uuid = 1;
+}
+
+message ChunkResponse {
+  bytes data = 1;
+  bool success = 2;
 }

@@ -70,6 +70,18 @@ class StorageService(chunk_pb2_grpc.ChunkServiceServicer):
         with open("/chunks/" + metadata["chunk_uuid"], "wb") as chunk_file:
             chunk_file.write(chunk)
         return chunk_pb2.StoreResponse(success=True)
+    
+    def GetChunk(self, request, context):
+        chunk_path = f"/chunks/{request.chunk_uuid}"
+        if not os.path.exists(chunk_path):
+            logger.warning(f"Chunk not found: {request.chunk_uuid}")
+            return chunk_pb2.ChunkResponse(data=b"", success=False)
+
+        with open(chunk_path, "rb") as f:
+            data = f.read()
+        return chunk_pb2.ChunkResponse(data=data, success=True)
+
+    
 
 def serve_grpc():
     server = grpc.server(

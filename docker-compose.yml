@@ -57,6 +57,11 @@ services:
       kafka:
         condition: service_healthy
 
+  file_downloader:
+    build: ./FileDownloader
+    ports:
+      - "7000:8000"
+
   file_distributor:
     build: ./FileDistributor
     environment:
