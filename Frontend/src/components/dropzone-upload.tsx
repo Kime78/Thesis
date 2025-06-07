@@ -4,12 +4,22 @@ import { FileIcon, defaultStyles } from "react-file-icon";
 import { Card, CardBody } from "@heroui/card";
 import { Progress } from "@heroui/progress";
 
+// Define the shape of the props our component now accepts
+type DropzoneUploadProps = {
+    onFileUpload: (fileData: {
+        title: string;
+        mimeType: string;
+        size: string;
+        extension: keyof typeof defaultStyles;
+    }) => void;
+};
+
 type UploadingFile = {
     file: File;
     progress: number;
 };
 
-const DropzoneUpload = () => {
+const DropzoneUpload: React.FC<DropzoneUploadProps> = ({ onFileUpload }) => {
     const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -22,7 +32,7 @@ const DropzoneUpload = () => {
             setUploadingFiles((prev) => [...prev, newUpload]);
 
             const formData = new FormData();
-            formData.append("uploaded_files", file); // Make sure FastAPI is expecting "files"
+            formData.append("uploaded_files", file);
 
             axios.post("http://localhost:8000/upload", formData, {
                 onUploadProgress: (progressEvent) => {
@@ -35,17 +45,33 @@ const DropzoneUpload = () => {
                         )
                     );
                 },
+            })
+                .then(() => {
+                    console.log(`${file.name} uploaded`);
+                    const extension = file.name.split(".").pop()?.toLowerCase() || "txt";
 
-            }).then(() => {
-                console.log(`${file.name} uploaded`);
-            }).catch((err) => {
-                console.error(`Error uploading ${file.name}`, err);
-            });
+                    // Call the parent's callback function with the new file's details
+                    onFileUpload({
+                        title: file.name,
+                        mimeType: file.type,
+                        size: `${(file.size / 1024 / 1024).toFixed(2)} MB`,
+                        extension: extension as keyof typeof defaultStyles,
+                    });
+
+                    // Remove the file from the local "uploading" state
+                    setUploadingFiles((prev) => prev.filter((f) => f.file !== file));
+
+                })
+                .catch((err) => {
+                    console.error(`Error uploading ${file.name}`, err);
+                    // Optionally, handle the error in the UI, e.g., show an error message
+                    // and remove the file from the uploading list
+                    setUploadingFiles((prev) => prev.filter((f) => f.file !== file));
+                });
         }
     };
 
     return (
-
         // biome-ignore lint/a11y/useKeyWithClickEvents: <explanation>
         <div
             className="w-full max-w-xl p-4 border-2 border-dashed rounded-lg text-white bg-zinc-900 cursor-pointer"
@@ -74,7 +100,7 @@ const DropzoneUpload = () => {
                             <CardBody>
                                 <div className="flex items-center gap-4">
                                     <div className="w-10 h-10">
-                                        <FileIcon extension={ext as keyof typeof defaultStyles} {...defaultStyles[ext as keyof typeof defaultStyles] || {}} />
+                                        <FileIcon extension={ext} {...(defaultStyles[ext as keyof typeof defaultStyles] || {})} />
                                     </div>
                                     <div className="flex-1">
                                         <p className="text-sm font-medium">{file.name}</p>
