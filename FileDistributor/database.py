@@ -31,4 +31,6 @@ file_metadata = Table(
     Column("storage_node", String),  # e.g., "http://storage-node:50051"
     Column("stored_at", DateTime),
     Column("status", String),
+    Column("file_hash", String),
+    Column("chunk_hash", String), 
 )

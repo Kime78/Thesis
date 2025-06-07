@@ -6,6 +6,7 @@ import os
 import random
 from typing import List, T
 from uuid import uuid4
+import hashlib
 
 import aiofiles
 from aiokafka import AIOKafkaProducer
@@ -61,6 +62,8 @@ def create_metadata(
         chunk_index: int,
         chunk_uuid: str,
         file_uuid: str,
+        file_hash: str,
+        chunk_hash: str 
 ) -> str:
     metadata = {
         "file_size": file_size,
@@ -70,6 +73,8 @@ def create_metadata(
         "chunk_index": chunk_index,
         "chunk_uuid": chunk_uuid,
         "file_uuid": file_uuid,
+        "file_hash": file_hash,
+        "chunk_hash": chunk_hash
     }
     return base64.b64encode(json.dumps(metadata).encode()).decode()
 
@@ -99,13 +104,14 @@ async def upload_files(uploaded_files: List[UploadFile] = File(...)):
                     await temp_file.write(chunk)
 
             file_size = os.path.getsize(temp_file_path)
-
+        
             chunk_index = 0
             async with aiofiles.open(temp_file_path, "rb") as file:
                 while True:
                     chunk = await file.read(CHUNK_SIZE)
                     if not chunk:
                         break
+                    file_hash = await file.read()
 
                     metadata = create_metadata(
                         file_name=file_name,
@@ -115,6 +121,8 @@ async def upload_files(uploaded_files: List[UploadFile] = File(...)):
                         chunk_index=chunk_index,
                         chunk_uuid=str(uuid4()),
                         file_uuid=file_uuid,
+                        file_hash=hashlib.sha256(file_hash).hexdigest(),
+                        chunk_hash=hashlib.sha256(chunk).hexdigest()
                     )
 
                     chunk_with_metadata = (
@@ -128,6 +136,7 @@ async def upload_files(uploaded_files: List[UploadFile] = File(...)):
                 "filename": file_name,
                 "chunks_sent": chunk_index,
                 "file_uuid": file_uuid,
+                
                 "message": "Processed in parallel",
             }
 
