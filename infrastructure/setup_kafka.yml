@@ -1,14 +1,24 @@
-- hosts: kafka
-  tasks:
-  - name: Install Java (OpenJDK 11 - a common choice)
-    ansible.builtin.package:
-      name: openjdk-11-jdk
-      state: present
-    when: ansible_os_family == "Debian"
+---
+- name: Setup Kafka
+  hosts: kafka
+  become: true
 
-  roles:
-    - sleighzy.kafka
   vars:
     kafka_socket_send_buffer_bytes: 20971520
     kafka_socket_receive_buffer_bytes: 20971520
     kafka_zookeeper_connect: zookeeper:2181
+
+    kafka_socket_request_max_bytes: 104857600 # Default is 100MB, ensure it's large enough
+    kafka_server_config_params:
+      message.max.bytes: 20242880 # Example: 5MB (5 * 1024 * 1024 bytes)
+      replica.fetch.max.bytes: 20242880 # Should be >= message.max.bytes
+
+  tasks:
+    - name: Install Java (OpenJDK 11 - a common choice)
+      ansible.builtin.package:
+        name: openjdk-11-jdk
+        state: present
+      when: ansible_os_family == "Debian"
+
+  roles:
+    - sleighzy.kafka

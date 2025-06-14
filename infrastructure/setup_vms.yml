@@ -14,22 +14,22 @@
       ansible.builtin.apt_repository:
         repo: ppa:deadsnakes/ppa
         state: present
-        update_cache: yes
-      become: yes
+        update_cache: true
+      become: true
 
     - name: Update apt package cache
       ansible.builtin.apt:
-        update_cache: yes
-        force_apt_get: yes # Use apt-get for compatibility, though apt is usually fine
-      become: yes 
+        update_cache: true
+        force_apt_get: true # Use apt-get for compatibility, though apt is usually fine
+      become: true
 
     - name: Upgrade all installed packages
       ansible.builtin.apt:
         upgrade: dist # 'dist' handles dependencies intelligently
-        autoremove: yes # Remove unnecessary packages
-        force_apt_get: yes
+        autoremove: true # Remove unnecessary packages
+        force_apt_get: true
       register: apt_upgrade_result
-      become: yes 
+      become: true
       # changed_when: "'0 upgraded, 0 newly installed, 0 to remove' not in apt_upgrade_result.stdout"
       # Note: Ansible's apt module is generally good at determining changes.
 
@@ -42,8 +42,13 @@
           - python3-pip     # Keep python3-pip for general system pip, if python3.12-pip isn't directly available
                             # Often python3.12-venv will pull in necessary dependencies for pip within the venv
         state: present
-        force_apt_get: yes
-      become: yes
+        force_apt_get: true
+      become: true
+
+    - name: Remove existing project files
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/app"
+        state: absent
 
     - name: Create Python 3.12 virtual environment
       ansible.builtin.command: python3.12 -m venv {{ app_path }}venv

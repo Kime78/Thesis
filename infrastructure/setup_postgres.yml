@@ -1,7 +1,7 @@
 ---
 - name: Setup PostgreSQL
   hosts: postgres
-  become: yes
+  become: true
 
   vars:
     postgresql_version: "14" # Adjust if needed
@@ -27,5 +27,5 @@
     - name: Enable and start PostgreSQL service
       ansible.builtin.systemd:
         name: postgresql
-        enabled: yes
+        enabled: true
         state: started

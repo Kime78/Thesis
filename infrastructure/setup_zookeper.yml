@@ -1,13 +1,14 @@
 ---
-- hosts: zookeepers
+- name: Configure zookeepers
+  hosts: zookeepers
 
   tasks:
-  - name: Install Java (OpenJDK 11 - a common choice)
-    ansible.builtin.package:
-      name: openjdk-11-jdk
-      state: present
-    when: ansible_os_family == "Debian"
-    
+    - name: Install Java (OpenJDK 11 - a common choice)
+      ansible.builtin.package:
+        name: openjdk-11-jdk
+        state: present
+      when: ansible_os_family == "Debian"
+
   roles:
     - sleighzy.zookeeper
   vars:

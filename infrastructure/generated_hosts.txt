@@ -5,10 +5,10 @@
 172.30.6.23	file-receiver
 172.30.6.212	kafka
 172.30.6.22	postgres
-172.30.6.75	storage-node-1
-172.30.6.243	storage-node-2
-172.30.6.87	storage-node-3
-172.30.6.225	storage-node-4
-172.30.6.124	storage-node-5
-172.30.6.44	storage-node-6
+172.30.6.75	storage-node1
+172.30.6.243	storage-node2
+172.30.6.87	storage-node3
+172.30.6.225	storage-node4
+172.30.6.124	storage-node5
+172.30.6.44	storage-node6
 172.30.6.100	zookeeper
