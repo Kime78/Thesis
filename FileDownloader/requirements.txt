@@ -39,3 +39,4 @@ uvicorn==0.34.3
 watchfiles==1.0.5
 websockets==15.0.1
 protobuf==6.31.1
+httpx==0.28.1

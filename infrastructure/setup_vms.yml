@@ -33,22 +33,32 @@
       # changed_when: "'0 upgraded, 0 newly installed, 0 to remove' not in apt_upgrade_result.stdout"
       # Note: Ansible's apt module is generally good at determining changes.
 
+    - name: Remove existing project files
+      ansible.builtin.file:
+        path: "{{ ansible_user_dir }}/app"
+        state: absent
+      become: true
+
     - name: Install Python 3.12 venv and pip
       ansible.builtin.apt:
         name:
           - python3.12 # Specify Python 3.12 venv package
           - python3.12-venv
           - python3.12-dev
-          - python3-pip     # Keep python3-pip for general system pip, if python3.12-pip isn't directly available
-                            # Often python3.12-venv will pull in necessary dependencies for pip within the venv
         state: present
         force_apt_get: true
       become: true
 
-    - name: Remove existing project files
-      ansible.builtin.file:
-        path: "{{ ansible_user_dir }}/app"
+
+
+    - name: Remove faulty
+      ansible.builtin.apt:
+        name: python3-pip 
         state: absent
+      become: true
+    
+
+
 
     - name: Create Python 3.12 virtual environment
       ansible.builtin.command: python3.12 -m venv {{ app_path }}venv
@@ -62,6 +72,9 @@
       ansible.builtin.command: "{{ app_path }}/venv/bin/pip install --upgrade pip"
       register: pip_upgrade_result
       changed_when: "'Successfully installed pip' not in pip_upgrade_result.stdout"
+
+    - name: Install dependencies
+      ansible.builtin.command: "{{ app_path }}/venv/bin/pip install six packaging"
 
     - name: Display virtual environment path
       ansible.builtin.debug:

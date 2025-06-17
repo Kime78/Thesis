@@ -19,6 +19,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+chunk_dir = '/home/ubuntu/app/chunks'
+
 # ---------------- FastAPI App ----------------
 app = FastAPI()
 
@@ -54,8 +56,10 @@ def start_fastapi():
 def parse_received_data(received_data: bytes):
     """Parse Kafka message into metadata and chunk"""
     try:
+        logger.info("Parsing chunk..")
         metadata_encoded, chunk = received_data.split(b"\n\n----METADATA----\n\n", 1)
         metadata_json = base64.b64decode(metadata_encoded).decode("utf-8")
+        logger.info("Parsed chunk")
         return json.loads(metadata_json), chunk
     except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as e:
         logger.error("Failed to parse message data")
@@ -64,15 +68,19 @@ def parse_received_data(received_data: bytes):
 class StorageService(chunk_pb2_grpc.ChunkServiceServicer):
     def StoreChunk(self, request, context):
         metadata, chunk = parse_received_data(request.data)
+        logger.info('=====================')
+        logger.info(chunk_dir)
         logger.info(f"Stored chunk {metadata} ({len(chunk)} bytes)")
-        if not os.path.exists("/chunks"):
-            os.makedirs("/chunks")
-        with open("/chunks/" + metadata["chunk_uuid"], "wb") as chunk_file:
+        if not os.path.exists(f"{chunk_dir}"):
+            logger.info("folder does not exist, creating...")
+            os.makedirs(f"{chunk_dir}")
+        logger.info(f"{chunk_dir}/" + metadata["chunk_uuid"])
+        with open(f"{chunk_dir}/" + metadata["chunk_uuid"], "wb") as chunk_file:
             chunk_file.write(chunk)
         return chunk_pb2.StoreResponse(success=True)
     
     def GetChunk(self, request, context):
-        chunk_path = f"/chunks/{request.chunk_uuid}"
+        chunk_path = f"{chunk_dir}/{request.chunk_uuid}"
         if not os.path.exists(chunk_path):
             logger.warning(f"Chunk not found: {request.chunk_uuid}")
             return chunk_pb2.ChunkResponse(data=b"", success=False)

@@ -33,6 +33,12 @@ resource "openstack_networking_port_v2" "file_receiver_port" {
   admin_state_up = "true"
 }
 
+resource "openstack_networking_port_v2" "file_downloader_port" {
+  name           = "file_downloader_port"
+  network_id     = data.openstack_networking_network_v2.licenta_net.id
+  admin_state_up = "true"
+}
+
 resource "openstack_networking_port_v2" "kafka_port" {
   name           = "kafka_port"
   network_id     = data.openstack_networking_network_v2.licenta_net.id
@@ -100,6 +106,10 @@ resource "openstack_networking_port_v2" "storage_node_6_port" {
 # and directly use the ID in port definitions. Otherwise, this ensures it's managed by Terraform.
 # --- Floating IP Definitions ---
 
+resource "openstack_networking_floatingip_v2" "file_downloader_fip" {
+  pool = "public" # Change to your external network name
+}
+
 resource "openstack_networking_floatingip_v2" "file_distributor_fip" {
   pool = "public" # Change to your external network name
 }
@@ -154,6 +164,17 @@ resource "openstack_compute_instance_v2" "file_distributor" {
   # security_groups are now managed by the port
   network {
     port = openstack_networking_port_v2.file_distributor_port.id
+  }
+}
+
+resource "openstack_compute_instance_v2" "file_downloader" {
+  name        = "file_downloader"
+  image_name  = "Ubuntu Focal"
+  flavor_name = "m1.small"
+  key_pair    = "terraform"
+  # security_groups are now managed by the port
+  network {
+    port = openstack_networking_port_v2.file_downloader_port.id
   }
 }
 
@@ -269,6 +290,11 @@ resource "openstack_networking_floatingip_associate_v2" "file_receiver_assoc" {
   port_id     = openstack_networking_port_v2.file_receiver_port.id
 }
 
+resource "openstack_networking_floatingip_associate_v2" "file_downloader_assoc" {
+  floating_ip = openstack_networking_floatingip_v2.file_downloader_fip.address
+  port_id     = openstack_networking_port_v2.file_downloader_port.id
+}
+
 resource "openstack_networking_floatingip_associate_v2" "kafka_assoc" {
   floating_ip = openstack_networking_floatingip_v2.kafka_fip.address
   port_id     = openstack_networking_port_v2.kafka_port.id
@@ -323,6 +349,11 @@ output "file_distributor_floating_ip" {
 output "file_receiver_floating_ip" {
   description = "Floating IP of the file_receiver instance"
   value       = openstack_networking_floatingip_v2.file_receiver_fip.address
+}
+
+output "file_downloader_floating_ip" {
+  description = "Floating IP of the file_receiver instance"
+  value       = openstack_networking_floatingip_v2.file_downloader_fip.address
 }
 
 output "kafka_floating_ip" {

@@ -89,7 +89,7 @@ def run_terraform_and_generate_hosts_file(terraform_dir=".", output_hosts_file="
             # Extract a number if present in the key for uniqueness
             match = re.search(r'storage_node_(\d+)_floating_ip', key)
             if match:
-                hostname = f"storage-node-{match.group(1)}"
+                hostname = f"storage-node{match.group(1)}"
             else:
                 hostname = f"storage-node" # Fallback if no number
         elif key == "zookeeper_floating_ip":

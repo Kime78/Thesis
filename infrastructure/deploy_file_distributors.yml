@@ -1,7 +1,7 @@
 ---
 - name: Deploy File Distributors
   hosts: file_distributors
-  become: yes
+  become: true
 
   vars:
     app_path: "/home/ubuntu/app"
@@ -13,9 +13,8 @@
         dest: "{{ app_path }}"
 
     - name: Install dependencies in virtual environment
-      ansible.builtin.pip:
-        requirements: /home/ubuntu/app/requirements.txt
-        virtualenv: /home/ubuntu/app/venv
+      ansible.builtin.command: "/home/ubuntu/app/venv/bin/pip install -r /home/ubuntu/app/requirements.txt"
+      changed_when: false
 
     # - name: Create systemd service for file distributor using venv
     #   ansible.builtin.copy:
@@ -39,16 +38,17 @@
     - name: Copy systemd service file on the remote host
       ansible.builtin.command: cp /home/ubuntu/app/file_distributor.service /etc/systemd/system/file_distributor.service
       become: true
+      changed_when: false
 
 
     - name: Reload systemd
       ansible.builtin.systemd:
         daemon_reload: true
-      become: yes
+      become: true
 
     - name: Enable and start service
       ansible.builtin.systemd:
         name: file_distributor
         enabled: true
         state: started
-      become: yes
+      become: true

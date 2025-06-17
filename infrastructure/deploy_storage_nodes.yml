@@ -1,4 +1,3 @@
-#FIX THIS
 ---
 - name: Deploy Storage Nodes
   hosts: storage_nodes
@@ -12,11 +11,22 @@
         src: ../StorageNode/
         dest: "{{ app_path }}"
 
-    - name: Install dependencies in virtual environment
-      ansible.builtin.pip:
-        requirements: /home/ubuntu/app/requirements.txt
-        virtualenv: /home/ubuntu/app/venv
+    - name: Create chunk folder
+      ansible.builtin.file:
+        path: /home/ubuntu/app/chunks
+        state: directory
 
+    - name: Set owner of ~/app to ubuntu
+      ansible.builtin.file:
+        path: /home/ubuntu/app  # Replace with the actual path to your 'app' folder
+        owner: ubuntu
+        group: ubuntu       # It's good practice to set the group as well, typically the primary group of the user
+        recurse: true        # Use this if you want to apply ownership to all files and subdirectories inside 'app'
+      become: true
+
+    - name: Install dependencies in virtual environment
+      ansible.builtin.command: "/home/ubuntu/app/venv/bin/pip install -r /home/ubuntu/app/requirements.txt"
+      changed_when: false
     # - name: Create systemd service for file distributor using venv
     #   ansible.builtin.copy:
     #     dest: /etc/systemd/system/file_receiver.service
@@ -39,6 +49,7 @@
 
     - name: Copy systemd service file on the remote host
       ansible.builtin.command: cp /home/ubuntu/app/storage_node.service /etc/systemd/system/storage_node.service
+      changed_when: false
       become: true
 
     - name: Reload systemd
