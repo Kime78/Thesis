@@ -2,14 +2,19 @@ import asyncio
 import base64
 from datetime import datetime
 import json
+import random
+from typing import List
 from aiokafka import AIOKafkaConsumer
 import grpc
 from grpc import aio as aiogrpc
+from pydantic import BaseModel, Field
 import chunk_pb2
 import chunk_pb2_grpc
 import logging
 from database import create_tables, file_metadata, database
 import os
+import requests
+import abc
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -39,6 +44,203 @@ def parse_received_data(received_data: bytes):
         raise
 
 
+class ReplicationAlgorithm:
+    def __init__(self) -> None:
+        self.nodes = [
+            "storage-node1:50051",
+            "storage-node2:50051",
+            "storage-node3:50051",
+            "storage-node4:50051",
+        ]
+
+    @abc.abstractmethod
+    def choose_node(self) -> str:
+        pass
+
+
+class RandomReplicationAlgorithm(ReplicationAlgorithm):
+    def choose_node(self) -> str:
+        return random.choice(self.nodes)
+
+
+class RoundRobinReplicationAlgorithm(ReplicationAlgorithm):
+    def __init__(self) -> None:
+        super().__init__()
+        self.round_robin = 0
+
+    def choose_node(self) -> str:
+        result = self.nodes[self.round_robin]
+        self.round_robin = (self.round_robin + 1) % len(self.nodes)
+        return result
+
+
+class CPUInfo(BaseModel):
+    usage_percent: float = Field(..., description="CPU usage percentage (0.0 to 1.0)")
+
+
+class RAMInfo(BaseModel):
+    total: int = Field(..., description="Total RAM in bytes")
+    used: int = Field(..., description="Used RAM in bytes")
+    available: int = Field(..., description="Available RAM in bytes")
+    usage_percent: float = Field(..., description="RAM usage percentage (0.0 to 1.0)")
+
+
+class DiskInfo(BaseModel):
+    total: int = Field(..., description="Total disk space in bytes")
+    used: int = Field(..., description="Used disk space in bytes")
+    free: int = Field(..., description="Free disk space in bytes")
+    usage_percent: float = Field(..., description="Disk usage percentage (0.0 to 1.0)")
+
+
+class NodeResources(BaseModel):
+    cpu: CPUInfo
+    ram: RAMInfo
+    disk: DiskInfo
+
+
+class ResourceBasedReplicationAlgorithm(ReplicationAlgorithm):
+    def __init__(self) -> None:
+        super().__init__()
+        self.node_apis = [
+            "storage-node1:8000",
+            "storage-node2:8000",
+            "storage-node3:8000",
+            "storage-node4:8000",
+        ]
+        self.node_resources: List[NodeResources] = []
+        for node in self.node_apis:
+            logger.info(f"http://{node}/system-status")
+            node_resource_json = requests.get(f"http://{node}/system-status").json()
+            self.node_resources.append(NodeResources(**node_resource_json))
+
+
+class CPUBasedReplicationAlgorithm(ResourceBasedReplicationAlgorithm):
+    def choose_node(self) -> str:
+        min_cpu_node_resource = min(
+            self.node_resources, key=lambda x: x.cpu.usage_percent
+        )
+
+        min_cpu_node_index = self.node_resources.index(min_cpu_node_resource)
+
+        chosen_grpc_address = self.nodes[min_cpu_node_index]
+        logger.info(f"Chosen node based on minimum CPU: {chosen_grpc_address}")
+        return chosen_grpc_address
+
+
+class RAMBasedReplicationAlgorithm(ResourceBasedReplicationAlgorithm):
+    def choose_node(self) -> str:
+        min_cpu_node_resource = min(self.node_resources, key=lambda x: x.ram.available)
+
+        min_cpu_node_index = self.node_resources.index(min_cpu_node_resource)
+
+        chosen_grpc_address = self.nodes[min_cpu_node_index]
+        logger.info(f"Chosen node based on minimum CPU: {chosen_grpc_address}")
+        return chosen_grpc_address
+
+
+class DiskBasedReplicationAlgorithm(ResourceBasedReplicationAlgorithm):
+    def choose_node(self) -> str:
+        min_cpu_node_resource = min(self.node_resources, key=lambda x: x.disk.free)
+
+        min_cpu_node_index = self.node_resources.index(min_cpu_node_resource)
+
+        chosen_grpc_address = self.nodes[min_cpu_node_index]
+        logger.info(f"Chosen node based on minimum CPU: {chosen_grpc_address}")
+        return chosen_grpc_address
+
+
+class CombinedResourceReplicationAlgorithm(ResourceBasedReplicationAlgorithm):
+    def __init__(
+        self, cpu_weight: float = 0.4, ram_weight: float = 0.3, disk_weight: float = 0.3
+    ) -> None:
+        super().__init__()
+        # Ensure weights sum to 1.0 (or close enough due to float precision)
+        total_weight = cpu_weight + ram_weight + disk_weight
+        if not (0.99 <= total_weight <= 1.01):  # Allow for small float inaccuracies
+            logger.warning(f"Weights do not sum to 1.0. Normalizing: {total_weight}")
+            cpu_weight /= total_weight
+            ram_weight /= total_weight
+            disk_weight /= total_weight
+
+        self.cpu_weight = cpu_weight
+        self.ram_weight = ram_weight
+        self.disk_weight = disk_weight
+        logger.info(
+            f"CombinedResourceAlgorithm initialized with weights: CPU={cpu_weight}, RAM={ram_weight}, Disk={disk_weight}"
+        )
+
+    def choose_node(self) -> str:
+        if not self.node_resources:
+            logger.warning(
+                "No node resources available for combined-based selection. Choosing randomly."
+            )
+            return random.choice(self.nodes)
+
+        available_resources_with_indices = []
+        for i, nr in enumerate(self.node_resources):
+            if nr:  # Ensure resource data was successfully fetched for this node
+                available_resources_with_indices.append((i, nr))
+
+        if not available_resources_with_indices:
+            logger.warning(
+                "No valid node resources found for combined selection. Choosing randomly."
+            )
+            return random.choice(self.nodes)
+
+        best_score = float("-inf")  # We want to maximize this score
+        best_node_index = -1
+
+        for index, node_resource in available_resources_with_indices:
+            # Normalize CPU usage: lower usage is better, so (1 - usage_percent) gives a higher score for lower usage.
+            normalized_cpu = 1.0 - node_resource.cpu.usage_percent
+
+            # Normalize RAM availability: higher available is better. Avoid division by zero.
+            normalized_ram = (
+                node_resource.ram.available / node_resource.ram.total
+                if node_resource.ram.total > 0
+                else 0.0
+            )
+
+            # Normalize Disk free space: higher free is better. Avoid division by zero.
+            normalized_disk = (
+                node_resource.disk.free / node_resource.disk.total
+                if node_resource.disk.total > 0
+                else 0.0
+            )
+
+            # Calculate combined score for this node
+            # A higher score indicates a more suitable node
+            current_score = (
+                self.cpu_weight * normalized_cpu
+                + self.ram_weight * normalized_ram
+                + self.disk_weight * normalized_disk
+            )
+
+            logger.debug(
+                f"Node {self.nodes[index]} (CPU: {node_resource.cpu.usage_percent:.2f}, "
+                f"RAM Free: {node_resource.ram.available / (1024**3):.2f} GB, "
+                f"Disk Free: {node_resource.disk.free / (1024**3):.2f} GB) "
+                f"-> Normalized (CPU: {normalized_cpu:.2f}, RAM: {normalized_ram:.2f}, Disk: {normalized_disk:.2f}) "
+                f"-> Score: {current_score:.4f}"
+            )
+
+            if current_score > best_score:
+                best_score = current_score
+                best_node_index = index
+
+        if best_node_index != -1:
+            chosen_grpc_address = self.nodes[best_node_index]
+            logger.info(
+                f"Chosen node {chosen_grpc_address} based on combined resources with score: {best_score:.4f}"
+            )
+            return chosen_grpc_address
+        else:
+            logger.error(
+                "Failed to choose a node with combined resources. Falling back to random."
+            )
+            return random.choice(self.nodes)
+
+
 async def send_to_storage_node(message: bytes) -> str:
     """Send chunk to storage node via gRPC"""
     metadata, chunk_data = parse_received_data(message)
@@ -63,7 +265,9 @@ async def process_message(message, db):
     global rr
     global nodes
     for replica in range(0, int(os.getenv("REPLICATION_FACTOR", "3"))):
-        metadata["storage_node"] = nodes[rr]
+        replcation_algorithm: ReplicationAlgorithm = CPUBasedReplicationAlgorithm()
+        logger.info("pula")
+        metadata["storage_node"] = replcation_algorithm.choose_node()
         rr = (rr + 1) % len(nodes)
         logger.info(f"Chosen storage node: {metadata['storage_node']}")
         # Save initial metadata with "pending" status
