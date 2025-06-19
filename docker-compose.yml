@@ -49,10 +49,38 @@ services:
       timeout: 2s
       retries: 15
 
-  file_receiver:
+  nginx:
+    image: nginx:latest
+    container_name: nginx_proxy
+    ports:
+      - "80:80" # Expose NGINX on host port 80
+    volumes:
+      - ./Nginx/nginx.conf:/etc/nginx/nginx.conf:ro # Mount our custom NGINX config
+    depends_on:
+      - file_receiver1
+      - file_receiver2
+      - file_receiver3
+
+  file_receiver1:
     build: ./FileReceiver
     ports:
-      - "8000:8000"
+      - "8001:8000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  file_receiver2:
+    build: ./FileReceiver
+    ports:
+      - "8002:8000"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  file_receiver3:
+    build: ./FileReceiver
+    ports:
+      - "8003:8000"
     depends_on:
       kafka:
         condition: service_healthy
@@ -63,6 +91,22 @@ services:
       - "7000:8000"
 
   file_distributor:
+    build: ./FileDistributor
+    environment:
+      - REPLICATION_FACTOR=4
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  file_distributor2:
+    build: ./FileDistributor
+    environment:
+      - REPLICATION_FACTOR=4
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  file_distributor3:
     build: ./FileDistributor
     environment:
       - REPLICATION_FACTOR=4
