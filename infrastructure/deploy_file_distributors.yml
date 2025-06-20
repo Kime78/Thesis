@@ -50,5 +50,5 @@
       ansible.builtin.systemd:
         name: file_distributor
         enabled: true
-        state: started
+        state: restarted
       become: true

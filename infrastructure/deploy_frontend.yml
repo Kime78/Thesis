@@ -1,30 +1,24 @@
 ---
 - name: Deploy pnpm Frontend Application
-  hosts: frontend # Define your target hosts group here (e.g., webservers)
-  become: yes         # Run tasks with sudo privileges
+  hosts: frontend
+  become: true # Run most tasks with sudo privileges by default
 
   vars:
     # --- General Application Variables ---
-    local_frontend_path: "../Frontend"                                      # Path to your local frontend project relative to the playbook
-    frontend_app_dir: "/home/ubuntu/frontend"                               # Directory where the app will be copied and built on the remote server
-    frontend_build_output_dir: "dist"                                       # Subdirectory where pnpm build outputs files (e.g., dist, build)
-    frontend_user: "www-data"                                               # User that Nginx typically runs as
-    ansible_user: "ubuntu"                                                  # Ensure this matches your SSH user
+    local_frontend_path: "../Frontend"                                # Path to your local frontend project relative to the playbook
+    app_root_dir: "/srv/frontend"                                     # A more standard location for web apps than a user's home dir
+    app_user: "ubuntu"                                                # The user that will own the source files and run the build
+    frontend_build_output_dir: "dist"
 
-    # --- Nginx Configuration Variables ---
-    nginx_server_name: "your-frontend-domain.com www.your-frontend-domain.com" # Replace with your domain(s) or server IP
-    nginx_port: 80                                                            # Port for Nginx to listen on
-    nginx_conf_name: "your-pnpm-app.conf"                                     # Name for the Nginx site configuration file (e.g., your-app.conf)
+    # --- Build & Nginx Variables ---
+    node_version: "20"                                                # Specify the major version of Node.js to install
+    build_output_dir: "dist"                                          # Subdirectory where pnpm build outputs files
+    nginx_user: "www-data"                                            # User that Nginx runs as
+    nginx_server_name: "your-domain.com"                              # Replace with your domain or server IP
+    nginx_conf_name: "frontend-app"                                   # A descriptive name for the Nginx config file
+    nginx_port: "80"
 
   tasks:
-    - name: Ensure rsync is installed on the control (local) machine
-      ansible.builtin.package:
-        name: rsync
-        state: present
-      delegate_to: localhost # This task runs on the machine where Ansible is executed
-      run_once: true         # Only run this task once, even if multiple hosts are targeted
-      become: false
-
     - name: Update apt cache and install essential packages
       ansible.builtin.apt:
         name:
@@ -32,128 +26,106 @@
           - git
           - nginx
           - ufw
+          - rsync # Ensure rsync is on the remote host for synchronize
         state: present
-        update_cache: yes
+        update_cache: true
 
     - name: Allow HTTP and HTTPS through UFW
       community.general.ufw:
         rule: allow
-        name: "{{ item }}"
-      loop:
-        - Nginx HTTP
-        - Nginx HTTPS
-      when: ansible_os_family == 'Debian'
+        name: "Nginx Full" # Simplifies to one rule for both HTTP and HTTPS
 
-    # - name: Install NVM (Node Version Manager) for the deployment user
-    #   ansible.builtin.shell: |
-    #     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-    #     export NVM_DIR="$HOME/.nvm"
-    #     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    #     [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
-    #   args:
-    #     creates: "{{ ansible_env.HOME }}/.nvm/nvm.sh"
-    #   register: nvm_install_output
-    #   changed_when: nvm_install_output.rc != 0
-
-    # - name: Ensure NVM is sourced for subsequent commands (for initial NVM/Node/pnpm checks)
-    #   ansible.builtin.shell: |
-    #     export NVM_DIR="$HOME/.nvm"
-    #     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    #   args:
-    #     executable: /bin/bash
-    #   changed_when: false
-
-    # - name: Install Node.js LTS version via NVM
-    #   ansible.builtin.shell: |
-    #     export NVM_DIR="$HOME/.nvm"
-    #     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-    #     nvm install --lts
-    #     nvm use --lts
-    #     nvm alias default 'lts/*'
-    #   args:
-    #     # Check for a specific NVM-managed node version to avoid re-installing unnecessarily
-    #     creates: "{{ ansible_env.HOME }}/.nvm/versions/node/v{{ lookup('pipe', 'nvm ls-remote --lts | head -n 1 | awk \\'{print $1}\\'' ) | regex_replace('[^0-9.]', '') }}"
-    #   register: node_install_output
-    #   changed_when: node_install_output.rc != 0
-
-    # - name: Install pnpm globally
-    #   ansible.builtin.shell: |
-    #     export NVM_DIR="$HOME/.nvm"
-    #     [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # Source NVM to find npm
-    #     npm install -g pnpm
-    #   register: pnpm_install_output
-    #   changed_when: pnpm_install_output.rc != 0
-
-    - name: Ensure application directory exists and has correct permissions
-      ansible.builtin.file:
-        path: "{{ frontend_app_dir }}"
-        state: directory
-        owner: "{{ ansible_user }}"
-        group: "{{ frontend_user }}"
+    # --- Node.js and pnpm Installation (Robust Method) ---
+    - name: Get Node.js setup script from NodeSource
+      ansible.builtin.get_url:
+        url: "https://deb.nodesource.com/setup_{{ node_version }}.x"
+        dest: /tmp/nodesource_setup.sh
         mode: '0755'
-        recurse: yes
 
-    - name: Transfer frontend project from local machine to remote server
+    - name: Execute NodeSource setup script
+      ansible.builtin.command:
+        cmd: /tmp/nodesource_setup.sh
+        creates: /etc/apt/sources.list.d/nodesource.list # This ensures idempotency
+
+    - name: Install Node.js and npm
+      ansible.builtin.apt:
+        name: nodejs
+        state: present
+
+    - name: Install pnpm globally using npm
+      ansible.builtin.npm:
+        name: pnpm
+        global: true
+        state: present
+
+    # --- Application Deployment ---
+    - name: Ensure application root directory exists
+      ansible.builtin.file:
+        path: "{{ app_root_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ nginx_user }}"
+        mode: '0775' # Group needs write access for the build process
+
+    - name: Transfer frontend project from local to remote
+      # NOTE: This task uses privilege escalation (become) on the DESTINATION
+      # to ensure rsync can write the files correctly.
       ansible.builtin.synchronize:
         src: "{{ local_frontend_path }}/"
-        dest: "{{ frontend_app_dir }}"
-        recursive: yes
-        delete: yes # Delete extraneous files on the remote that are not in src
+        dest: "{{ app_root_dir }}"
+        recursive: true
+        delete: true # Delete extraneous files on the remote
         rsync_opts:
           - "--exclude=.git/"
-          - "--exclude=node_modules/" # Exclude node_modules to ensure fresh install
-          - "--exclude=dist/"         # Exclude dist to ensure fresh build
-      delegate_to: localhost
-      register: sync_result
-      changed_when: sync_result.changed
+          - "--exclude=node_modules/"
+          - "--exclude=dist/"
+      become: true
+
+    # --- Build Steps ---
+    - name: Ensure build directory is cleared before a new build
+      ansible.builtin.file:
+        path: "{{ app_root_dir }}/{{ build_output_dir }}"
+        state: absent
+      become: true
+      # become_user: "{{ app_user }}"
 
     - name: Install pnpm dependencies
-      ansible.builtin.shell: |
-        export NVM_DIR="$HOME/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # Re-source NVM to ensure pnpm is in PATH
-        pnpm install
-      args:
-        chdir: "{{ frontend_app_dir }}"
-      register: pnpm_install_result
-      changed_when: "pnpm_install_result.rc != 0 or 'added' in pnpm_install_result.stdout or 'removed' in pnpm_install_result.stdout"
+      ansible.builtin.command:
+        cmd: pnpm install
+        chdir: "{{ app_root_dir }}"
+      become: true
+      become_user: "{{ app_user }}" # Run this specific command as the app_user
 
     - name: Build frontend application
-      ansible.builtin.shell: |
-        export NVM_DIR="$HOME/.nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh" # Re-source NVM to ensure pnpm is in PATH
-        pnpm build
-      args:
-        chdir: "{{ frontend_app_dir }}"
-      register: pnpm_build_result
-      changed_when: "pnpm_build_result.rc != 0"
+      ansible.builtin.command:
+        cmd: pnpm build
+        chdir: "{{ app_root_dir }}"
+      become: true
+      become_user: "{{ app_user }}" # Run this specific command as the app_user
 
-    - name: Set correct permissions for the built frontend files
+    # --- Nginx Configuration ---
+    - name: Set correct permissions for the built assets for Nginx
       ansible.builtin.file:
-        path: "{{ frontend_app_dir }}/{{ frontend_build_output_dir }}"
-        owner: "{{ frontend_user }}"
-        group: "{{ frontend_user }}"
+        path: "{{ app_root_dir }}/{{ build_output_dir }}"
+        owner: "{{ nginx_user }}"
+        group: "{{ nginx_user }}"
         mode: '0755'
-        recurse: yes
+        recurse: true
 
     - name: Configure Nginx for the frontend application
       ansible.builtin.template:
-        src: nginx.conf.j2
-        dest: "/etc/nginx/sites-available/{{ nginx_conf_name }}"
-        owner: root
-        group: root
-        mode: '0644'
+        src: nginx.conf.j2 # Assumes you have this template file
+        dest: "/etc/nginx/sites-available/{{ nginx_conf_name }}.conf"
       notify: Restart Nginx
 
     - name: Enable Nginx site
       ansible.builtin.file:
-        src: "/etc/nginx/sites-available/{{ nginx_conf_name }}"
-        dest: "/etc/nginx/sites-enabled/{{ nginx_conf_name }}"
+        src: "/etc/nginx/sites-available/{{ nginx_conf_name }}.conf"
+        dest: "/etc/nginx/sites-enabled/{{ nginx_conf_name }}.conf"
         state: link
-        owner: root
-        group: root
       notify: Restart Nginx
 
-    - name: Remove default Nginx site (optional, recommended)
+    - name: Remove default Nginx site to avoid conflicts
       ansible.builtin.file:
         path: /etc/nginx/sites-enabled/default
         state: absent

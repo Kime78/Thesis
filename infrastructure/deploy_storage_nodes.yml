@@ -61,5 +61,5 @@
       ansible.builtin.systemd:
         name: storage_node
         enabled: true
-        state: started
+        state: restarted
       become: true

@@ -51,5 +51,5 @@
       ansible.builtin.systemd:
         name: file_receiver
         enabled: true
-        state: started
+        state: restarted
       become: true
