@@ -28,12 +28,12 @@ CHUNK_SIZE = 10 * 1024 * 1024  # 10 MiB
 app = FastAPI()
 producer: AIOKafkaProducer = None  # type: ignore
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your frontend origin
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],  # In production, specify your frontend origin
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 
 @app.on_event("startup")
@@ -109,7 +109,9 @@ async def upload_files(uploaded_files: List[UploadFile] = File(...)):
             # First Pass: Write the uploaded file to a temporary location
             # while simultaneously calculating its complete SHA256 hash.
             # This is memory-efficient as it processes the file in small pieces.
-            async with aiofiles.tempfile.NamedTemporaryFile("wb", delete=False) as temp_file:
+            async with aiofiles.tempfile.NamedTemporaryFile(
+                "wb", delete=False
+            ) as temp_file:
                 temp_file_path = temp_file.name
                 while True:
                     piece = await uploaded_file.read(8192)  # Read in small pieces
@@ -160,7 +162,9 @@ async def upload_files(uploaded_files: List[UploadFile] = File(...)):
             }
 
         except Exception as e:
-            logger.error(f"Failed to process {uploaded_file.filename}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to process {uploaded_file.filename}: {e}", exc_info=True
+            )
             return {"filename": uploaded_file.filename, "error": str(e)}
 
         finally:

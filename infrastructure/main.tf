@@ -27,8 +27,50 @@ resource "openstack_networking_port_v2" "file_distributor_port" {
   admin_state_up = "true"
 }
 
+resource "openstack_networking_port_v2" "file_distributor2_port" {
+  name           = "file_distributor2_port"
+  network_id     = data.openstack_networking_network_v2.licenta_net.id
+  admin_state_up = "true"
+}
+
+resource "openstack_networking_port_v2" "file_distributor3_port" {
+  name           = "file_distributor3_port"
+  network_id     = data.openstack_networking_network_v2.licenta_net.id
+  admin_state_up = "true"
+}
+
+resource "openstack_networking_port_v2" "frontend_port" {
+  name           = "frontend_port"
+  network_id     = data.openstack_networking_network_v2.licenta_net.id
+  admin_state_up = "true"
+}
+
+resource "openstack_networking_port_v2" "load_balancer_port" {
+  name           = "load_balancer_port"
+  network_id     = data.openstack_networking_network_v2.licenta_net.id
+  admin_state_up = "true"
+}
+
+resource "openstack_networking_port_v2" "test_port" {
+  name           = "test_port"
+  network_id     = data.openstack_networking_network_v2.licenta_net.id
+  admin_state_up = "true"
+}
+
 resource "openstack_networking_port_v2" "file_receiver_port" {
   name           = "file_receiver_port"
+  network_id     = data.openstack_networking_network_v2.licenta_net.id
+  admin_state_up = "true"
+}
+
+resource "openstack_networking_port_v2" "file_receiver2_port" {
+  name           = "file_receiver2_port"
+  network_id     = data.openstack_networking_network_v2.licenta_net.id
+  admin_state_up = "true"
+}
+
+resource "openstack_networking_port_v2" "file_receiver3_port" {
+  name           = "file_receiver3_port"
   network_id     = data.openstack_networking_network_v2.licenta_net.id
   admin_state_up = "true"
 }
@@ -87,20 +129,6 @@ resource "openstack_networking_port_v2" "storage_node_4_port" {
 
 }
 
-resource "openstack_networking_port_v2" "storage_node_5_port" {
-  name           = "storage_node_5_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-
-}
-
-resource "openstack_networking_port_v2" "storage_node_6_port" {
-  name           = "storage_node_6_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-
-}
-
 # --- Security Group (Example - ensure 'default' exists or define it) ---
 # If your "default" security group is pre-existing and you know its ID, you can remove this
 # and directly use the ID in port definitions. Otherwise, this ensures it's managed by Terraform.
@@ -114,9 +142,38 @@ resource "openstack_networking_floatingip_v2" "file_distributor_fip" {
   pool = "public" # Change to your external network name
 }
 
+resource "openstack_networking_floatingip_v2" "file_distributor2_fip" {
+  pool = "public" # Change to your external network name
+}
+
+resource "openstack_networking_floatingip_v2" "file_distributor3_fip" {
+  pool = "public" # Change to your external network name
+}
+
 resource "openstack_networking_floatingip_v2" "file_receiver_fip" {
   pool = "public"
 }
+
+resource "openstack_networking_floatingip_v2" "file_receiver2_fip" {
+  pool = "public"
+}
+
+resource "openstack_networking_floatingip_v2" "file_receiver3_fip" {
+  pool = "public"
+}
+
+resource "openstack_networking_floatingip_v2" "test_fip" {
+  pool = "public"
+}
+
+resource "openstack_networking_floatingip_v2" "frontend_fip" {
+  pool = "public"
+}
+
+resource "openstack_networking_floatingip_v2" "load_balancer_fip" {
+  pool = "public"
+}
+
 
 resource "openstack_networking_floatingip_v2" "kafka_fip" {
   pool = "public"
@@ -146,14 +203,6 @@ resource "openstack_networking_floatingip_v2" "storage_node_4_fip" {
   pool = "public"
 }
 
-resource "openstack_networking_floatingip_v2" "storage_node_5_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "storage_node_6_fip" {
-  pool = "public"
-}
-
 # --- Instance Definitions ---
 
 resource "openstack_compute_instance_v2" "file_distributor" {
@@ -164,6 +213,28 @@ resource "openstack_compute_instance_v2" "file_distributor" {
   # security_groups are now managed by the port
   network {
     port = openstack_networking_port_v2.file_distributor_port.id
+  }
+}
+
+resource "openstack_compute_instance_v2" "file_distributor2" {
+  name        = "file_distributor2"
+  image_name  = "Ubuntu Focal"
+  flavor_name = "m1.small"
+  key_pair    = "terraform"
+  # security_groups are now managed by the port
+  network {
+    port = openstack_networking_port_v2.file_distributor2_port.id
+  }
+}
+
+resource "openstack_compute_instance_v2" "file_distributor3" {
+  name        = "file_distributor3"
+  image_name  = "Ubuntu Focal"
+  flavor_name = "m1.small"
+  key_pair    = "terraform"
+  # security_groups are now managed by the port
+  network {
+    port = openstack_networking_port_v2.file_distributor3_port.id
   }
 }
 
@@ -185,6 +256,56 @@ resource "openstack_compute_instance_v2" "file_receiver" {
   key_pair    = "terraform"
   network {
     port = openstack_networking_port_v2.file_receiver_port.id
+  }
+}
+
+resource "openstack_compute_instance_v2" "file_receiver2" {
+  name        = "file_receiver2"
+  image_name  = "Ubuntu Focal"
+  flavor_name = "m1.small"
+  key_pair    = "terraform"
+  network {
+    port = openstack_networking_port_v2.file_receiver2_port.id
+  }
+}
+
+resource "openstack_compute_instance_v2" "file_receiver3" {
+  name        = "file_receiver3"
+  image_name  = "Ubuntu Focal"
+  flavor_name = "m1.small"
+  key_pair    = "terraform"
+  network {
+    port = openstack_networking_port_v2.file_receiver3_port.id
+  }
+}
+
+resource "openstack_compute_instance_v2" "frontend" {
+  name        = "frontend"
+  image_name  = "Ubuntu Focal"
+  flavor_name = "m1.small"
+  key_pair    = "terraform"
+  network {
+    port = openstack_networking_port_v2.frontend_port.id
+  }
+}
+
+resource "openstack_compute_instance_v2" "load_balancer" {
+  name        = "load_balancer"
+  image_name  = "Ubuntu Focal"
+  flavor_name = "m1.small"
+  key_pair    = "terraform"
+  network {
+    port = openstack_networking_port_v2.load_balancer_port.id
+  }
+}
+
+resource "openstack_compute_instance_v2" "test" {
+  name        = "test"
+  image_name  = "Ubuntu Focal"
+  flavor_name = "m1.small"
+  key_pair    = "terraform"
+  network {
+    port = openstack_networking_port_v2.test_port.id
   }
 }
 
@@ -258,25 +379,6 @@ resource "openstack_compute_instance_v2" "storage_node_4" {
   }
 }
 
-resource "openstack_compute_instance_v2" "storage_node_5" {
-  name        = "storage_node_5"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.storage_node_5_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "storage_node_6" {
-  name        = "storage_node_6"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.storage_node_6_port.id
-  }
-}
 
 # --- Floating IP Associations ---
 
@@ -285,9 +387,44 @@ resource "openstack_networking_floatingip_associate_v2" "file_distributor_assoc"
   port_id     = openstack_networking_port_v2.file_distributor_port.id
 }
 
+resource "openstack_networking_floatingip_associate_v2" "file_distributor2_assoc" {
+  floating_ip = openstack_networking_floatingip_v2.file_distributor2_fip.address
+  port_id     = openstack_networking_port_v2.file_distributor2_port.id
+}
+
+resource "openstack_networking_floatingip_associate_v2" "file_distributor3_assoc" {
+  floating_ip = openstack_networking_floatingip_v2.file_distributor3_fip.address
+  port_id     = openstack_networking_port_v2.file_distributor3_port.id
+}
+
 resource "openstack_networking_floatingip_associate_v2" "file_receiver_assoc" {
   floating_ip = openstack_networking_floatingip_v2.file_receiver_fip.address
   port_id     = openstack_networking_port_v2.file_receiver_port.id
+}
+
+resource "openstack_networking_floatingip_associate_v2" "file_receiver2_assoc" {
+  floating_ip = openstack_networking_floatingip_v2.file_receiver2_fip.address
+  port_id     = openstack_networking_port_v2.file_receiver2_port.id
+}
+
+resource "openstack_networking_floatingip_associate_v2" "file_receiver3_assoc" {
+  floating_ip = openstack_networking_floatingip_v2.file_receiver3_fip.address
+  port_id     = openstack_networking_port_v2.file_receiver3_port.id
+}
+
+resource "openstack_networking_floatingip_associate_v2" "frontend_assoc" {
+  floating_ip = openstack_networking_floatingip_v2.frontend_fip.address
+  port_id     = openstack_networking_port_v2.frontend_port.id
+}
+
+resource "openstack_networking_floatingip_associate_v2" "load_balancer_assoc" {
+  floating_ip = openstack_networking_floatingip_v2.load_balancer_fip.address
+  port_id     = openstack_networking_port_v2.load_balancer_port.id
+}
+
+resource "openstack_networking_floatingip_associate_v2" "test_assoc" {
+  floating_ip = openstack_networking_floatingip_v2.test_fip.address
+  port_id     = openstack_networking_port_v2.test_port.id
 }
 
 resource "openstack_networking_floatingip_associate_v2" "file_downloader_assoc" {
@@ -330,25 +467,50 @@ resource "openstack_networking_floatingip_associate_v2" "storage_node_4_assoc" {
   port_id     = openstack_networking_port_v2.storage_node_4_port.id
 }
 
-resource "openstack_networking_floatingip_associate_v2" "storage_node_5_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.storage_node_5_fip.address
-  port_id     = openstack_networking_port_v2.storage_node_5_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "storage_node_6_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.storage_node_6_fip.address
-  port_id     = openstack_networking_port_v2.storage_node_6_port.id
-}
-
 # --- Outputs for Floating IPs ---
 output "file_distributor_floating_ip" {
   description = "Floating IP of the file_distributor instance"
   value       = openstack_networking_floatingip_v2.file_distributor_fip.address
 }
 
+output "file_distributor2_floating_ip" {
+  description = "Floating IP of the file_distributor instance"
+  value       = openstack_networking_floatingip_v2.file_distributor2_fip.address
+}
+
+output "file_distributor3_floating_ip" {
+  description = "Floating IP of the file_distributor instance"
+  value       = openstack_networking_floatingip_v2.file_distributor3_fip.address
+}
+
 output "file_receiver_floating_ip" {
   description = "Floating IP of the file_receiver instance"
   value       = openstack_networking_floatingip_v2.file_receiver_fip.address
+}
+
+output "file_receiver2_floating_ip" {
+  description = "Floating IP of the file_receiver instance"
+  value       = openstack_networking_floatingip_v2.file_receiver2_fip.address
+}
+
+output "file_receiver3_floating_ip" {
+  description = "Floating IP of the file_receiver instance"
+  value       = openstack_networking_floatingip_v2.file_receiver3_fip.address
+}
+
+output "load_balancer_floating_ip" {
+  description = "Floating IP of the file_receiver instance"
+  value       = openstack_networking_floatingip_v2.load_balancer_fip.address
+}
+
+output "frontend_floating_ip" {
+  description = "Floating IP of the file_receiver instance"
+  value       = openstack_networking_floatingip_v2.frontend_fip.address
+}
+
+output "test_floating_ip" {
+  description = "Floating IP of the file_receiver instance"
+  value       = openstack_networking_floatingip_v2.test_fip.address
 }
 
 output "file_downloader_floating_ip" {
@@ -389,16 +551,6 @@ output "storage_node_3_floating_ip" {
 output "storage_node_4_floating_ip" {
   description = "Floating IP of the storage_node_4 instance"
   value       = openstack_networking_floatingip_v2.storage_node_4_fip.address
-}
-
-output "storage_node_5_floating_ip" {
-  description = "Floating IP of the storage_node_5 instance"
-  value       = openstack_networking_floatingip_v2.storage_node_5_fip.address
-}
-
-output "storage_node_6_floating_ip" {
-  description = "Floating IP of the storage_node_6 instance"
-  value       = openstack_networking_floatingip_v2.storage_node_6_fip.address
 }
 
 # ... (add similar outputs for all other floating IPs if needed)

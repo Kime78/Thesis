@@ -4,7 +4,6 @@ import { FileIcon, defaultStyles } from "react-file-icon";
 import { Card, CardBody } from "@heroui/card";
 import { Progress } from "@heroui/progress";
 
-// Define the shape of the props our component now accepts
 type DropzoneUploadProps = {
     onFileUpload: (fileData: {
         title: string;
@@ -32,25 +31,27 @@ const DropzoneUpload: React.FC<DropzoneUploadProps> = ({ onFileUpload }) => {
             setUploadingFiles((prev) => [...prev, newUpload]);
 
             const formData = new FormData();
-            formData.append("uploaded_files", file);
+            formData.append("uploaded_files", file); // ✅ Make sure this matches backend
 
-            axios.post("http://localhost:8000/upload", formData, {
-                onUploadProgress: (progressEvent) => {
-                    const progress = Math.round(
-                        (progressEvent.loaded * 100) / (progressEvent.total || 1)
-                    );
-                    setUploadingFiles((prev) =>
-                        prev.map((f) =>
-                            f.file === file ? { ...f, progress } : f
-                        )
-                    );
-                },
-            })
+            console.log("Uploading:", file.name, formData.get("uploaded_files"));
+
+            axios
+                .post("http://localhost:8888/upload", formData, {
+                    onUploadProgress: (progressEvent) => {
+                        const progress = Math.round(
+                            (progressEvent.loaded * 100) / (progressEvent.total || 1)
+                        );
+                        setUploadingFiles((prev) =>
+                            prev.map((f) =>
+                                f.file === file ? { ...f, progress } : f
+                            )
+                        );
+                    },
+                })
                 .then(() => {
                     console.log(`${file.name} uploaded`);
                     const extension = file.name.split(".").pop()?.toLowerCase() || "txt";
 
-                    // Call the parent's callback function with the new file's details
                     onFileUpload({
                         title: file.name,
                         mimeType: file.type,
@@ -58,21 +59,20 @@ const DropzoneUpload: React.FC<DropzoneUploadProps> = ({ onFileUpload }) => {
                         extension: extension as keyof typeof defaultStyles,
                     });
 
-                    // Remove the file from the local "uploading" state
-                    setUploadingFiles((prev) => prev.filter((f) => f.file !== file));
-
+                    setUploadingFiles((prev) =>
+                        prev.filter((f) => f.file !== file)
+                    );
                 })
                 .catch((err) => {
                     console.error(`Error uploading ${file.name}`, err);
-                    // Optionally, handle the error in the UI, e.g., show an error message
-                    // and remove the file from the uploading list
-                    setUploadingFiles((prev) => prev.filter((f) => f.file !== file));
+                    setUploadingFiles((prev) =>
+                        prev.filter((f) => f.file !== file)
+                    );
                 });
         }
     };
 
     return (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: <explanation>
         <div
             className="w-full max-w-xl p-4 border-2 border-dashed rounded-lg text-white bg-zinc-900 cursor-pointer"
             onDragOver={(e) => e.preventDefault()}
@@ -95,7 +95,6 @@ const DropzoneUpload: React.FC<DropzoneUploadProps> = ({ onFileUpload }) => {
                 {uploadingFiles.map(({ file, progress }, idx) => {
                     const ext = file.name.split(".").pop()?.toLowerCase() || "txt";
                     return (
-                        // biome-ignore lint/suspicious/noArrayIndexKey: <explanation>
                         <Card key={idx} className="bg-zinc-800">
                             <CardBody>
                                 <div className="flex items-center gap-4">
@@ -104,7 +103,9 @@ const DropzoneUpload: React.FC<DropzoneUploadProps> = ({ onFileUpload }) => {
                                     </div>
                                     <div className="flex-1">
                                         <p className="text-sm font-medium">{file.name}</p>
-                                        <p className="text-xs text-gray-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                                        <p className="text-xs text-gray-400">
+                                            {(file.size / 1024 / 1024).toFixed(2)} MB
+                                        </p>
                                         <Progress value={progress} className="mt-1" />
                                     </div>
                                 </div>
