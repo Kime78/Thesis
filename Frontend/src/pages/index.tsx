@@ -42,7 +42,7 @@ export default function IndexPage() {
   useEffect(() => {
     const fetchFiles = async () => {
       try {
-        const response = await fetch("http://localhost:7000/files");
+        const response = await fetch("http://172.30.6.237:8000/files");
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -78,7 +78,7 @@ export default function IndexPage() {
     try {
       // Corrected to a POST request with file_uuid in the request body
       const response = await axios.post(
-        "http://localhost:7000/download", // Endpoint remains the same
+        "http://172.30.6.237:8000/download", // Endpoint remains the same
         { file_uuid: fileUuid }, // Send file_uuid in the request body
         {
           responseType: "blob", // Important for downloading files

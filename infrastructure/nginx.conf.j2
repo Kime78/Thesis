@@ -2,7 +2,7 @@ server {
     listen {{ nginx_port }};
     server_name {{ nginx_server_name }};
 
-    root {{ frontend_app_dir }}/{{ frontend_build_output_dir }};
+    root {{ app_root_dir }}/{{ frontend_build_output_dir }};
     index index.html index.htm;
 
     # For Single Page Applications (SPAs) that require client-side routing

@@ -36,7 +36,7 @@ const DropzoneUpload: React.FC<DropzoneUploadProps> = ({ onFileUpload }) => {
             console.log("Uploading:", file.name, formData.get("uploaded_files"));
 
             axios
-                .post("http://localhost:8888/upload", formData, {
+                .post("http://172.30.6.13:8080/upload", formData, {
                     onUploadProgress: (progressEvent) => {
                         const progress = Math.round(
                             (progressEvent.loaded * 100) / (progressEvent.total || 1)

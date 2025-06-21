@@ -1,0 +1,11 @@
+---
+- name: Restart nodes
+  hosts: storage_nodes
+
+  tasks:
+    - name: Enable and start service
+      ansible.builtin.systemd:
+        name: storage_node
+        enabled: true
+        state: restarted
+      become: true

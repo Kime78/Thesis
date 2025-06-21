@@ -1,0 +1,11 @@
+---
+- name: Restart receivers
+  hosts: file_receivers
+
+  tasks:
+    - name: Enable and start service
+      ansible.builtin.systemd:
+        name: file_receiver
+        enabled: true
+        state: restarted
+      become: true

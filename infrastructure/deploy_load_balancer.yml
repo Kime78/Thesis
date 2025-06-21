@@ -1,0 +1,38 @@
+---
+- name: Deploy Load Balancer
+  hosts: load_balancer
+  become: true # Use 'sudo' to execute tasks
+  tasks:
+    - name: Update apt package cache and install NGINX
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: true
+      # Note: For RHEL/CentOS based systems, you would use the 'ansible.builtin.dnf'
+      # or 'ansible.builtin.yum' module instead of 'apt'.
+
+    - name: Copy custom NGINX configuration
+      ansible.builtin.copy:
+        src: ../Nginx/nginx.conf # Path to your local config file
+        dest: /etc/nginx/nginx.conf # Destination on the remote server
+        owner: root
+        group: root
+        mode: '0644'
+        validate: 'nginx -t -c %s' # Validate the config before applying
+      notify: # This will trigger the "Restart Nginx" handler on change
+        - Restart Nginx
+
+    - name: Ensure NGINX is running and enabled on boot
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+  # Handlers are tasks that only run when notified by another task.
+  # This section ensures NGINX is gracefully restarted only when the
+  # configuration file has actually changed.
+  handlers:
+    - name: Restart Nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted

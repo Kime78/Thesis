@@ -22,6 +22,7 @@ import grpc
 
 app = FastAPI()
 
+
 class DownloadRequest(BaseModel):
     file_uuid: str
 
@@ -33,35 +34,47 @@ logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-def choose_node(nodes: List[FileMetadata]) -> FileMetadata: 
+
+def choose_node(nodes: List[FileMetadata]) -> FileMetadata:
     return random.choice(nodes)
 
+
 MAX_GRPC_MESSAGE_LENGTH = 16 * 1024 * 1024
+
+
 async def fetch_chunk(chunk_uuid: str, node_address: str, chunk_hash: str) -> bytes:
     channel_options = [
-        ('grpc.max_receive_message_length', MAX_GRPC_MESSAGE_LENGTH),
-        ('grpc.max_send_message_length', MAX_GRPC_MESSAGE_LENGTH),
+        ("grpc.max_receive_message_length", MAX_GRPC_MESSAGE_LENGTH),
+        ("grpc.max_send_message_length", MAX_GRPC_MESSAGE_LENGTH),
     ]
-    async with grpc.aio.insecure_channel(f"{node_address}", options=channel_options) as channel:
+    async with grpc.aio.insecure_channel(
+        f"{node_address}", options=channel_options
+    ) as channel:
         stub = chunk_pb2_grpc.ChunkServiceStub(channel)
         response = await stub.GetChunk(chunk_pb2.ChunkRequest(chunk_uuid=chunk_uuid))
         logger.info(f"Downloaded chunk {chunk_uuid} from {node_address}")
         downloaded_hash = hashlib.sha256(response.data).hexdigest()
         if downloaded_hash != chunk_hash:
-            raise Exception(f"Failed to download chunk {chunk_uuid} from {node_address}, hashes dont match downloaded{downloaded_hash} uploaded{chunk_hash}")
+            raise Exception(
+                f"Failed to download chunk {chunk_uuid} from {node_address}, hashes dont match downloaded{downloaded_hash} uploaded{chunk_hash}"
+            )
         if not response.success:
-            raise Exception(f"Failed to download chunk {chunk_uuid} from {node_address}")
+            raise Exception(
+                f"Failed to download chunk {chunk_uuid} from {node_address}"
+            )
         return response.data
+
 
 from fastapi.responses import StreamingResponse
 from fastapi import HTTPException
 import io
 import base64
+
 
 @app.get("/files")
 async def show_files():
@@ -71,12 +84,15 @@ async def show_files():
         files = list(result.all())
     return files
 
+
 @app.post("/download")
 async def download_files(req: DownloadRequest):
-    file_uuid = req.file_uuid 
+    file_uuid = req.file_uuid
     async with async_session() as session:
-        stmt = select(FileMetadata).where(FileMetadata.file_uuid == file_uuid).order_by(
-            FileMetadata.chunk_index, FileMetadata.storage_node
+        stmt = (
+            select(FileMetadata)
+            .where(FileMetadata.file_uuid == file_uuid)
+            .order_by(FileMetadata.chunk_index, FileMetadata.storage_node)
         )
         result = await session.exec(stmt)
         files = list(result.all())
@@ -84,11 +100,14 @@ async def download_files(req: DownloadRequest):
     if not files:
         raise HTTPException(status_code=404, detail="File not found")
 
-    grouped_files = [files[i:i + 4] for i in range(0, len(files), 4)]
+    grouped_files = [files[i : i + 4] for i in range(0, len(files), 4)]
     chosen_files = [choose_node(group) for group in grouped_files]
 
     try:
-        tasks = [fetch_chunk(chunk.chunk_uuid, chunk.storage_node, chunk.chunk_hash) for chunk in chosen_files]
+        tasks = [
+            fetch_chunk(chunk.chunk_uuid, chunk.storage_node, chunk.chunk_hash)
+            for chunk in chosen_files
+        ]
         logger.info("Starting download tasks")
         chunks = await asyncio.gather(*tasks)
         logger.info("Joining data")
@@ -96,15 +115,17 @@ async def download_files(req: DownloadRequest):
         downloaded_hash = hashlib.sha256(combined_data).hexdigest()
         logger.info(files[0])
         if downloaded_hash != chosen_files[0].file_hash:
-            raise Exception(f"Failed to download file {files[0].file_uuid}, hashes dont match downloaded {downloaded_hash} uploaded {chosen_files[0].file_hash}")
+            raise Exception(
+                f"Failed to download file {files[0].file_uuid}, hashes dont match downloaded {downloaded_hash} uploaded {chosen_files[0].file_hash}"
+            )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch chunks: {str(e)}")
 
     file_like = io.BytesIO(combined_data)
-    
+
     # Ensure a fallback filename if it's somehow None or empty
     filename = files[0].file_name or "downloaded_file"
-    
+
     # URL-encode the filename to handle special characters safely
     encoded_filename = quote(filename)
 
@@ -115,5 +136,5 @@ async def download_files(req: DownloadRequest):
     return StreamingResponse(
         file_like,
         media_type="application/octet-stream",
-        headers={"Content-Disposition": content_disposition_header}
+        headers={"Content-Disposition": content_disposition_header},
     )

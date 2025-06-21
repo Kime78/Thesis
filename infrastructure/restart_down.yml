@@ -1,0 +1,11 @@
+---
+- name: Restart downloaders
+  hosts: file_downloaders
+
+  tasks:
+    - name: Enable and start service
+      ansible.builtin.systemd:
+        name: file_downloader
+        enabled: true
+        state: restarted
+      become: true

@@ -1,0 +1,11 @@
+---
+- name: Restart distributors
+  hosts: file_distributors
+
+  tasks:
+    - name: Enable and start service
+      ansible.builtin.systemd:
+        name: file_distributor
+        enabled: true
+        state: restarted
+      become: true

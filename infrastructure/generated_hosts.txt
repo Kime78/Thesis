@@ -9,6 +9,7 @@
 172.30.6.218	file-receiver3
 172.30.6.80	frontend
 172.30.6.8	test
+172.30.6.13 load_balancer
 172.30.6.237	file-downloader
 172.30.6.212	kafka
 172.30.6.22	postgres
