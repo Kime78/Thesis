@@ -3,12 +3,13 @@ import base64
 import hashlib
 import io
 import logging
+import math
 import random
 from typing import List
 from fastapi import FastAPI, UploadFile, File, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlmodel import select
 from urllib.parse import quote
@@ -87,6 +88,15 @@ async def show_files():
 
 @app.get("/status/{file_uuid}")
 async def get_file_upload_status(file_uuid: str):
+    """
+    Retrieves the upload status of a file.
+
+    Args:
+        file_uuid: The UUID of the file to check.
+
+    Returns:
+        A JSON response indicating the file status.
+    """
     async with async_session() as session:
         stmt = (
             select(FileMetadata)
@@ -95,15 +105,38 @@ async def get_file_upload_status(file_uuid: str):
         )
         result = await session.exec(stmt)
         files: List[FileMetadata] = list(result.all())
-        if len(files) == 0:
-            return "no_file"
+
+        if not files:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "status": "not_found",
+                    "message": f"File with UUID '{file_uuid}' not found.",
+                },
+            )
 
         file = files[0]
-        supposed_nr_chunks = (file.file_size / file.chunk_size) * 3
-        if supposed_nr_chunks != len(files):
-            return "uploading"
+        # Ensure floating point division for accuracy
+        supposed_nr_chunks = (math.ceil(file.file_size / float(file.chunk_size))) * 3
 
-        return "complete"
+        if supposed_nr_chunks != len(files):
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "status": "uploading",
+                    "message": "File upload is still in progress.",
+                    "current_chunks": len(files),
+                    "expected_chunks": int(supposed_nr_chunks),
+                },
+            )
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "complete",
+                "message": "File upload is complete.",
+            },
+        )
 
 
 @app.post("/download")

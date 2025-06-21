@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
-import axios from "axios"; // Import axios for download progress
+import { useState, useEffect, useMemo, useCallback } from "react";
+import axios from "axios";
 import DropzoneUpload from "@/components/dropzone-upload";
 import FileCard from "@/components/file";
 import { title } from "@/components/primitives";
@@ -9,15 +9,16 @@ import { Card, CardBody } from "@heroui/card";
 import { Progress } from "@heroui/progress";
 import { FileIcon } from "react-file-icon";
 
-// Define a type for our file data for type safety
 type UploadedFile = {
   title: string;
   mimeType: string;
-  size: string; // Formatted size for display e.g., "123.45 KB"
-  rawSize: number; // Raw size in bytes, for accurate sorting
+  size: string;
+  rawSize: number;
   extension: keyof typeof defaultStyles;
   file_uuid: string;
-  uploadDate: string; // ISO date string, for sorting
+  uploadDate: string;
+  status?: "uploading" | "complete";
+  progress?: number;
 };
 
 type DownloadingFile = {
@@ -27,76 +28,86 @@ type DownloadingFile = {
   extension: keyof typeof defaultStyles;
 };
 
-// Define types for sorting for better type safety
+type FileStatusResponse = {
+  status: "uploading" | "complete";
+  message: string;
+  current_chunks?: number;
+  expected_chunks?: number;
+};
+
 type SortType = "title" | "rawSize" | "extension" | "uploadDate";
 type SortOrder = "asc" | "desc";
+
+const API_BASE_URL = "http://172.30.6.237:8000";
 
 export default function IndexPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [downloadingFiles, setDownloadingFiles] = useState<DownloadingFile[]>([]);
-
-  // State for search and sort functionality
   const [searchTerm, setSearchTerm] = useState("");
   const [sortType, setSortType] = useState<SortType>("uploadDate");
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
-  // FIX: Updated the handler to match the props of DropzoneUpload
-  // The function now accepts the object provided by the onFileUpload callback.
-  const handleFileUpload = (fileData: {
-    title: string;
-    mimeType: string;
-    size: string;
-    extension: keyof typeof defaultStyles;
-  }) => {
-    // NOTE: The DropzoneUpload component provides a pre-formatted size string (e.g., "25.6 KB")
-    // but not the raw size in bytes. The 'rawSize' property is essential for accurate sorting by size.
-    // We are setting it to 0 here as a placeholder. For correct functionality,
-    // the DropzoneUpload component should be modified to provide the original file size in bytes.
-    const newFile: UploadedFile = {
-      title: fileData.title,
-      mimeType: fileData.mimeType,
-      size: fileData.size,
-      rawSize: 0, // Placeholder, see NOTE above.
-      extension: fileData.extension,
-      uploadDate: new Date().toISOString(), // Set current date for newly uploaded files
-      file_uuid: `temp-uuid-${Date.now()}`, // Generate a temp UUID
-    };
-    setUploadedFiles((prevFiles) => [...prevFiles, newFile]);
-  };
+  const fetchFilesAndStatuses = useCallback(async () => {
+    try {
+      const filesResponse = await fetch(`${API_BASE_URL}/files`);
+      if (!filesResponse.ok) {
+        throw new Error(`HTTP error! status: ${filesResponse.status}`);
+      }
+      const files: any[] = await filesResponse.json();
 
-  useEffect(() => {
-    const fetchFiles = async () => {
-      try {
-        const response = await fetch("http://172.30.6.237:8000/files");
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+      const statusPromises = files.map((file) =>
+        fetch(`${API_BASE_URL}/status/${file.file_uuid}`).then((res) => res.json())
+      );
+      const statuses: FileStatusResponse[] = await Promise.all(statusPromises);
+
+      const statusMap = new Map<string, FileStatusResponse>();
+      statuses.forEach((status, index) => {
+        statusMap.set(files[index].file_uuid, status);
+      });
+
+      const formattedFiles: UploadedFile[] = files.map((file: any) => {
+        const status = statusMap.get(file.file_uuid);
+        let progress = 0;
+        if (status?.status === "uploading" && status.expected_chunks && status.current_chunks) {
+          progress = Math.round((status.current_chunks * 100) / status.expected_chunks);
+        } else if (status?.status === "complete") {
+          progress = 100;
         }
-        const files = await response.json();
 
-        const formattedFiles: UploadedFile[] = files.map((file: any) => ({
+        return {
           title: file.file_name,
           mimeType: file.content_type,
           size: `${(file.file_size / 1024).toFixed(2)} KB`,
-          rawSize: file.file_size, // Keep raw size for sorting
+          rawSize: file.file_size,
           extension:
-            (file.file_name.split(".").pop()?.toLowerCase() ||
-              "txt") as keyof typeof defaultStyles,
+            (file.file_name.split(".").pop()?.toLowerCase() || "txt") as keyof typeof defaultStyles,
           file_uuid: file.file_uuid,
           uploadDate: file.stored_at || new Date().toISOString(),
-        }));
-        setUploadedFiles(formattedFiles);
-      } catch (error) {
-        console.error("Error fetching files:", error);
-      }
-    };
+          status: status?.status,
+          progress: progress,
+        };
+      });
 
-    fetchFiles();
+      setUploadedFiles(formattedFiles);
+    } catch (error) {
+      console.error("Error fetching files and statuses:", error);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchFilesAndStatuses();
+    const intervalId = setInterval(fetchFilesAndStatuses, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [fetchFilesAndStatuses]);
+
+  const handleFileUpload = () => {
+    setTimeout(fetchFilesAndStatuses, 1000);
+  };
 
   const handleDownload = async (fileUuid: string, fileName: string) => {
     const fileExtension =
-      (fileName.split(".").pop()?.toLowerCase() ||
-        "txt") as keyof typeof defaultStyles;
+      (fileName.split(".").pop()?.toLowerCase() || "txt") as keyof typeof defaultStyles;
     setDownloadingFiles((prev) => [
       ...prev,
       { fileUuid, fileName, progress: 0, extension: fileExtension },
@@ -104,7 +115,7 @@ export default function IndexPage() {
 
     try {
       const response = await axios.post(
-        "http://172.30.6.237:8000/download",
+        `${API_BASE_URL}/download`,
         { file_uuid: fileUuid },
         {
           responseType: "blob",
@@ -129,15 +140,11 @@ export default function IndexPage() {
       link.remove();
       window.URL.revokeObjectURL(url);
 
-      setDownloadingFiles((prev) =>
-        prev.filter((f) => f.fileUuid !== fileUuid)
-      );
+      setDownloadingFiles((prev) => prev.filter((f) => f.fileUuid !== fileUuid));
     } catch (error) {
       console.error(`Error downloading ${fileName}:`, error);
       alert(`Failed to download ${fileName}. Please try again.`);
-      setDownloadingFiles((prev) =>
-        prev.filter((f) => f.fileUuid !== fileUuid)
-      );
+      setDownloadingFiles((prev) => prev.filter((f) => f.fileUuid !== fileUuid));
     }
   };
 
@@ -148,7 +155,6 @@ export default function IndexPage() {
       )
       .sort((a, b) => {
         const order = sortOrder === 'asc' ? 1 : -1;
-
         switch (sortType) {
           case 'title':
             return a.title.localeCompare(b.title) * order;
@@ -164,33 +170,28 @@ export default function IndexPage() {
       });
   }, [uploadedFiles, searchTerm, sortType, sortOrder]);
 
-
   return (
     <DefaultLayout>
       <section className="flex flex-col items-center justify-center gap-14 py-8 md:py-10">
         <h1 className={title()}>Upload Files</h1>
-
         <DropzoneUpload onFileUpload={handleFileUpload} />
 
-        {/* Render download progress */}
         {downloadingFiles.length > 0 && (
           <div className="w-full max-w-xl mt-8 space-y-4">
-            <h2 className="text-xl font-semibold text-left w-full">
-              Downloading Files
-            </h2>
+            <h2 className="text-xl font-semibold text-left w-full">Downloading Files</h2>
             {downloadingFiles.map(({ fileUuid, fileName, progress, extension }) => (
               <Card key={fileUuid} className="bg-zinc-800">
                 <CardBody>
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10">
-                      <FileIcon
-                        extension={extension}
-                        {...(defaultStyles[extension] || {})}
-                      />
+                    <div className="w-10 h-10 flex-shrink-0">
+                      <FileIcon extension={extension} {...(defaultStyles[extension] || {})} />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium">{fileName}</p>
-                      <Progress value={progress} className="mt-1" />
+                      <div className="flex justify-between mb-1">
+                        <p className="text-sm font-medium text-white truncate pr-4">{fileName}</p>
+                        <p className="text-sm font-medium text-zinc-400">{progress}%</p>
+                      </div>
+                      <Progress value={progress} />
                     </div>
                   </div>
                 </CardBody>
@@ -199,14 +200,10 @@ export default function IndexPage() {
           </div>
         )}
 
-        {/* Render the list of uploaded files dynamically */}
         {uploadedFiles.length > 0 && (
           <div className="w-full max-w-xl mt-8 space-y-4">
-            <h2 className="text-xl font-semibold text-left w-full">
-              Uploaded Files
-            </h2>
+            <h2 className="text-xl font-semibold text-left w-full">Uploaded Files</h2>
 
-            {/* Search and Sort Controls */}
             <div className="flex flex-col sm:flex-row gap-4 p-4 bg-zinc-800 rounded-lg">
               <input
                 type="text"
@@ -237,20 +234,27 @@ export default function IndexPage() {
               </div>
             </div>
 
-            {/* Display Processed Files */}
             {processedFiles.length > 0 ? (
               processedFiles.map((file) => (
-                <FileCard
-                  key={file.file_uuid}
-                  title={file.title}
-                  mimeType={file.mimeType}
-                  size={file.size}
-                  extension={file.extension}
-                  storedAt={file.uploadDate}
-                  onDownload={() =>
-                    file.file_uuid && handleDownload(file.file_uuid, file.title)
-                  }
-                />
+                <div key={file.file_uuid}>
+                  <FileCard
+                    title={file.title}
+                    mimeType={file.mimeType}
+                    size={file.size}
+                    extension={file.extension}
+                    storedAt={file.uploadDate}
+                    onDownload={() =>
+                      file.file_uuid && file.status === "complete" && handleDownload(file.file_uuid, file.title)
+                    }
+                  // isDownloadDisabled={file.status !== "complete"}
+                  />
+                  {file.status === 'uploading' && (
+                    <div className="bg-zinc-800 -mt-2 rounded-b-lg px-4 pb-3">
+                      <Progress value={file.progress} className="w-full" />
+                      <p className="text-xs text-center text-zinc-400 mt-1">Uploading... {file.progress}%</p>
+                    </div>
+                  )}
+                </div>
               ))
             ) : (
               <div className="text-center p-8 text-zinc-500">
