@@ -41,7 +41,7 @@ async def startup_event():
     """Initializes the Kafka producer on application startup."""
     global producer
     producer = AIOKafkaProducer(
-        bootstrap_servers="kafka:29092",
+        bootstrap_servers="kafka:9092",
         value_serializer=lambda x: x,
         # Ensure Kafka producer can handle messages slightly larger than the chunk size
         max_request_size=15 * 1024 * 1024,
@@ -114,7 +114,7 @@ async def upload_files(uploaded_files: List[UploadFile] = File(...)):
             ) as temp_file:
                 temp_file_path = temp_file.name
                 while True:
-                    piece = await uploaded_file.read(8192)  # Read in small pieces
+                    piece = await uploaded_file.read(CHUNK_SIZE)  # Read in small pieces
                     if not piece:
                         break
                     file_hasher.update(piece)  # Update the hash with each piece

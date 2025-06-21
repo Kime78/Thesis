@@ -85,6 +85,27 @@ async def show_files():
     return files
 
 
+@app.get("/status/{file_uuid}")
+async def get_file_upload_status(file_uuid: str):
+    async with async_session() as session:
+        stmt = (
+            select(FileMetadata)
+            .where(FileMetadata.file_uuid == file_uuid)
+            .order_by(FileMetadata.chunk_index, FileMetadata.storage_node)
+        )
+        result = await session.exec(stmt)
+        files: List[FileMetadata] = list(result.all())
+        if len(files) == 0:
+            return "no_file"
+
+        file = files[0]
+        supposed_nr_chunks = (file.file_size / file.chunk_size) * 3
+        if supposed_nr_chunks != len(files):
+            return "uploading"
+
+        return "complete"
+
+
 @app.post("/download")
 async def download_files(req: DownloadRequest):
     file_uuid = req.file_uuid
@@ -100,9 +121,9 @@ async def download_files(req: DownloadRequest):
     if not files:
         raise HTTPException(status_code=404, detail="File not found")
 
-    grouped_files = [files[i : i + 4] for i in range(0, len(files), 4)]
+    grouped_files = [files[i : i + 3] for i in range(0, len(files), 3)]
     chosen_files = [choose_node(group) for group in grouped_files]
-
+    logger.info(len(chosen_files))
     try:
         tasks = [
             fetch_chunk(chunk.chunk_uuid, chunk.storage_node, chunk.chunk_hash)

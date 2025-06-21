@@ -15,6 +15,7 @@
       ansible.builtin.file:
         path: /home/ubuntu/app/chunks
         state: directory
+      
 
     - name: Set owner of ~/app to ubuntu
       ansible.builtin.file:

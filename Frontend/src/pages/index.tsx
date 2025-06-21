@@ -1,42 +1,67 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import axios from "axios"; // Import axios for download progress
 import DropzoneUpload from "@/components/dropzone-upload";
 import FileCard from "@/components/file";
 import { title } from "@/components/primitives";
 import DefaultLayout from "@/layouts/default";
 import { defaultStyles } from "react-file-icon";
-import { Card, CardBody } from "@heroui/card"; // Assuming these are from your UI library
-import { Progress } from "@heroui/progress"; // Assuming these are from your UI library
-import { FileIcon } from "react-file-icon"; // For displaying file icons in download progress
+import { Card, CardBody } from "@heroui/card";
+import { Progress } from "@heroui/progress";
+import { FileIcon } from "react-file-icon";
 
 // Define a type for our file data for type safety
 type UploadedFile = {
   title: string;
   mimeType: string;
-  size: string;
+  size: string; // Formatted size for display e.g., "123.45 KB"
+  rawSize: number; // Raw size in bytes, for accurate sorting
   extension: keyof typeof defaultStyles;
-  file_uuid: string; // file_uuid is now required for downloaded files
+  file_uuid: string;
+  uploadDate: string; // ISO date string, for sorting
 };
 
 type DownloadingFile = {
   fileUuid: string;
   fileName: string;
   progress: number;
-  // Add an extension for the FileIcon in the progress card
   extension: keyof typeof defaultStyles;
 };
 
+// Define types for sorting for better type safety
+type SortType = "title" | "rawSize" | "extension" | "uploadDate";
+type SortOrder = "asc" | "desc";
+
 export default function IndexPage() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [downloadingFiles, setDownloadingFiles] = useState<DownloadingFile[]>(
-    []
-  );
+  const [downloadingFiles, setDownloadingFiles] = useState<DownloadingFile[]>([]);
 
-  const handleFileUpload = (file: Omit<UploadedFile, 'file_uuid'> & { file_uuid?: string }) => {
-    setUploadedFiles((prevFiles) => [
-      ...prevFiles,
-      { ...file, file_uuid: file.file_uuid || `temp-uuid-${Date.now()}` }
-    ]);
+  // State for search and sort functionality
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortType, setSortType] = useState<SortType>("uploadDate");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+
+  // FIX: Updated the handler to match the props of DropzoneUpload
+  // The function now accepts the object provided by the onFileUpload callback.
+  const handleFileUpload = (fileData: {
+    title: string;
+    mimeType: string;
+    size: string;
+    extension: keyof typeof defaultStyles;
+  }) => {
+    // NOTE: The DropzoneUpload component provides a pre-formatted size string (e.g., "25.6 KB")
+    // but not the raw size in bytes. The 'rawSize' property is essential for accurate sorting by size.
+    // We are setting it to 0 here as a placeholder. For correct functionality,
+    // the DropzoneUpload component should be modified to provide the original file size in bytes.
+    const newFile: UploadedFile = {
+      title: fileData.title,
+      mimeType: fileData.mimeType,
+      size: fileData.size,
+      rawSize: 0, // Placeholder, see NOTE above.
+      extension: fileData.extension,
+      uploadDate: new Date().toISOString(), // Set current date for newly uploaded files
+      file_uuid: `temp-uuid-${Date.now()}`, // Generate a temp UUID
+    };
+    setUploadedFiles((prevFiles) => [...prevFiles, newFile]);
   };
 
   useEffect(() => {
@@ -52,10 +77,12 @@ export default function IndexPage() {
           title: file.file_name,
           mimeType: file.content_type,
           size: `${(file.file_size / 1024).toFixed(2)} KB`,
+          rawSize: file.file_size, // Keep raw size for sorting
           extension:
             (file.file_name.split(".").pop()?.toLowerCase() ||
               "txt") as keyof typeof defaultStyles,
           file_uuid: file.file_uuid,
+          uploadDate: file.stored_at || new Date().toISOString(),
         }));
         setUploadedFiles(formattedFiles);
       } catch (error) {
@@ -76,16 +103,14 @@ export default function IndexPage() {
     ]);
 
     try {
-      // Corrected to a POST request with file_uuid in the request body
       const response = await axios.post(
-        "http://172.30.6.237:8000/download", // Endpoint remains the same
-        { file_uuid: fileUuid }, // Send file_uuid in the request body
+        "http://172.30.6.237:8000/download",
+        { file_uuid: fileUuid },
         {
-          responseType: "blob", // Important for downloading files
+          responseType: "blob",
           onDownloadProgress: (progressEvent) => {
-            const progress = Math.round(
-              (progressEvent.loaded * 100) / (progressEvent.total || 1)
-            );
+            const total = progressEvent.total || response.headers['content-length'];
+            const progress = Math.round((progressEvent.loaded * 100) / (total || 1));
             setDownloadingFiles((prev) =>
               prev.map((f) =>
                 f.fileUuid === fileUuid ? { ...f, progress } : f
@@ -95,7 +120,6 @@ export default function IndexPage() {
         }
       );
 
-      // Create a URL for the blob and trigger a download
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
@@ -103,6 +127,7 @@ export default function IndexPage() {
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(url);
 
       setDownloadingFiles((prev) =>
         prev.filter((f) => f.fileUuid !== fileUuid)
@@ -115,6 +140,30 @@ export default function IndexPage() {
       );
     }
   };
+
+  const processedFiles = useMemo(() => {
+    return [...uploadedFiles]
+      .filter((file) =>
+        file.title.toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      .sort((a, b) => {
+        const order = sortOrder === 'asc' ? 1 : -1;
+
+        switch (sortType) {
+          case 'title':
+            return a.title.localeCompare(b.title) * order;
+          case 'rawSize':
+            return (a.rawSize - b.rawSize) * order;
+          case 'extension':
+            return a.extension.localeCompare(b.extension) * order;
+          case 'uploadDate':
+            return (new Date(a.uploadDate).getTime() - new Date(b.uploadDate).getTime()) * order;
+          default:
+            return 0;
+        }
+      });
+  }, [uploadedFiles, searchTerm, sortType, sortOrder]);
+
 
   return (
     <DefaultLayout>
@@ -136,9 +185,7 @@ export default function IndexPage() {
                     <div className="w-10 h-10">
                       <FileIcon
                         extension={extension}
-                        {...(defaultStyles[
-                          extension as keyof typeof defaultStyles
-                        ] || {})}
+                        {...(defaultStyles[extension] || {})}
                       />
                     </div>
                     <div className="flex-1">
@@ -158,18 +205,58 @@ export default function IndexPage() {
             <h2 className="text-xl font-semibold text-left w-full">
               Uploaded Files
             </h2>
-            {uploadedFiles.map((file) => (
-              <FileCard
-                key={file.file_uuid}
-                title={file.title}
-                mimeType={file.mimeType}
-                size={file.size}
-                extension={file.extension}
-                onDownload={() =>
-                  file.file_uuid && handleDownload(file.file_uuid, file.title)
-                }
+
+            {/* Search and Sort Controls */}
+            <div className="flex flex-col sm:flex-row gap-4 p-4 bg-zinc-800 rounded-lg">
+              <input
+                type="text"
+                placeholder="Search files by name..."
+                className="flex-grow p-2 rounded bg-zinc-700 text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
-            ))}
+              <div className="flex gap-4">
+                <select
+                  className="p-2 rounded bg-zinc-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={sortType}
+                  onChange={(e) => setSortType(e.target.value as SortType)}
+                >
+                  <option value="uploadDate">Sort by Date</option>
+                  <option value="title">Sort by Name</option>
+                  <option value="rawSize">Sort by Size</option>
+                  <option value="extension">Sort by Type</option>
+                </select>
+                <select
+                  className="p-2 rounded bg-zinc-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+                >
+                  <option value="desc">Descending</option>
+                  <option value="asc">Ascending</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Display Processed Files */}
+            {processedFiles.length > 0 ? (
+              processedFiles.map((file) => (
+                <FileCard
+                  key={file.file_uuid}
+                  title={file.title}
+                  mimeType={file.mimeType}
+                  size={file.size}
+                  extension={file.extension}
+                  storedAt={file.uploadDate}
+                  onDownload={() =>
+                    file.file_uuid && handleDownload(file.file_uuid, file.title)
+                  }
+                />
+              ))
+            ) : (
+              <div className="text-center p-8 text-zinc-500">
+                No files match your search.
+              </div>
+            )}
           </div>
         )}
       </section>

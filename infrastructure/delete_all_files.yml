@@ -1,0 +1,17 @@
+---
+- name: Delete all files from the storage nodess
+  hosts: storage_nodes
+  become: true
+
+  tasks:
+  - name: Delete chunks folder
+    ansible.builtin.file:
+      path: /home/ubuntu/app/chunks
+      state: absent
+
+  - name: Recreate chunks folder
+    ansible.builtin.file: 
+      path: /home/ubuntu/app/chunks
+      state: directory
+    become: true
+    become_user: ubuntu
