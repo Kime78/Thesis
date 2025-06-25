@@ -3,6 +3,6 @@
   tasks:
     - name: Fetch the Kafka server.properties file
       ansible.builtin.fetch:
-        src: /etc/kafka/server.properties # Adjust this path if necessary
-        dest: /tmp/kafka_server.properties # Local path on your control node to save the file
+        src: /etc/kafka/server.properties
+        dest: /tmp/kafka_server.properties
         flat: yes

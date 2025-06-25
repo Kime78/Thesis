@@ -5,26 +5,20 @@ server {
     root {{ app_root_dir }}/{{ frontend_build_output_dir }};
     index index.html index.htm;
 
-    # For Single Page Applications (SPAs) that require client-side routing
-    # This block ensures that if a route isn't found, it defaults back to index.html
-    # so the client-side router can handle it.
     location / {
         try_files $uri $uri/ /index.html;
     }
 
-    # Add caching for static assets
     location ~* \.(css|js|gif|jpe?g|png|webp|svg|woff2|woff|ttf|eot|ico)$ {
         expires 1y;
         access_log off;
         add_header Cache-Control "public";
     }
 
-    # Deny access to hidden files
     location ~ /\.git {
         deny all;
     }
 
-    # Basic error pages
     error_page 404 /404.html;
     location = /404.html {
         internal;
@@ -34,7 +28,4 @@ server {
     location = /50x.html {
         internal;
     }
-
-    # Include additional Nginx configurations (e.g., for SSL later)
-    # include /etc/nginx/conf.d/*.conf;
 }

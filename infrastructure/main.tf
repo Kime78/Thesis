@@ -11,15 +11,9 @@ provider "openstack" {
   cloud = "openstack" # Match this with the entry in clouds.yaml
 }
 
-# --- Network Configuration ---
-# Assuming 'licenta_network_id' is known or can be fetched via a data source
-# For simplicity, if 'licenta' is the network name, we'll need its ID.
-# If you have the network ID, you can replace data.openstack_networking_network_v2.licenta_net.id with it.
 data "openstack_networking_network_v2" "licenta_net" {
   name = "licenta"
 }
-
-# --- Port Definitions ---
 
 resource "openstack_networking_port_v2" "file_distributor_port" {
   name           = "file_distributor_port"
@@ -129,11 +123,6 @@ resource "openstack_networking_port_v2" "storage_node_4_port" {
 
 }
 
-# --- Security Group (Example - ensure 'default' exists or define it) ---
-# If your "default" security group is pre-existing and you know its ID, you can remove this
-# and directly use the ID in port definitions. Otherwise, this ensures it's managed by Terraform.
-# --- Floating IP Definitions ---
-
 resource "openstack_networking_floatingip_v2" "file_downloader_fip" {
   pool = "public" # Change to your external network name
 }
@@ -203,7 +192,6 @@ resource "openstack_networking_floatingip_v2" "storage_node_4_fip" {
   pool = "public"
 }
 
-# --- Instance Definitions ---
 
 resource "openstack_compute_instance_v2" "file_distributor" {
   name        = "file_distributor"
@@ -379,9 +367,6 @@ resource "openstack_compute_instance_v2" "storage_node_4" {
   }
 }
 
-
-# --- Floating IP Associations ---
-
 resource "openstack_networking_floatingip_associate_v2" "file_distributor_assoc" {
   floating_ip = openstack_networking_floatingip_v2.file_distributor_fip.address
   port_id     = openstack_networking_port_v2.file_distributor_port.id
@@ -553,4 +538,3 @@ output "storage_node_4_floating_ip" {
   value       = openstack_networking_floatingip_v2.storage_node_4_fip.address
 }
 
-# ... (add similar outputs for all other floating IPs if needed)

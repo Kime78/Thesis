@@ -1,21 +1,18 @@
 ---
 - name: Deploy pnpm Frontend Application
   hosts: frontend
-  become: true # Run most tasks with sudo privileges by default
+  become: true 
 
   vars:
-    # --- General Application Variables ---
-    local_frontend_path: "../Frontend"                                # Path to your local frontend project relative to the playbook
-    app_root_dir: "/srv/frontend"                                     # A more standard location for web apps than a user's home dir
-    app_user: "ubuntu"                                                # The user that will own the source files and run the build
+    local_frontend_path: "../Frontend"                               
+    app_root_dir: "/srv/frontend"                                     
+    app_user: "ubuntu"                                               
     frontend_build_output_dir: "dist"
-
-    # --- Build & Nginx Variables ---
-    node_version: "20"                                                # Specify the major version of Node.js to install
-    build_output_dir: "dist"                                          # Subdirectory where pnpm build outputs files
-    nginx_user: "www-data"                                            # User that Nginx runs as
-    nginx_server_name: "your-domain.com"                              # Replace with your domain or server IP
-    nginx_conf_name: "frontend-app"                                   # A descriptive name for the Nginx config file
+    node_version: "20"                                                
+    build_output_dir: "dist"                                         
+    nginx_user: "www-data"                                          
+    nginx_server_name: "your-domain.com"                             
+    nginx_conf_name: "frontend-app"                           
     nginx_port: "80"
 
   tasks:
@@ -26,16 +23,15 @@
           - git
           - nginx
           - ufw
-          - rsync # Ensure rsync is on the remote host for synchronize
+          - rsync
         state: present
         update_cache: true
 
     - name: Allow HTTP and HTTPS through UFW
       community.general.ufw:
         rule: allow
-        name: "Nginx Full" # Simplifies to one rule for both HTTP and HTTPS
+        name: "Nginx Full"
 
-    # --- Node.js and pnpm Installation (Robust Method) ---
     - name: Get Node.js setup script from NodeSource
       ansible.builtin.get_url:
         url: "https://deb.nodesource.com/setup_{{ node_version }}.x"
@@ -45,7 +41,7 @@
     - name: Execute NodeSource setup script
       ansible.builtin.command:
         cmd: /tmp/nodesource_setup.sh
-        creates: /etc/apt/sources.list.d/nodesource.list # This ensures idempotency
+        creates: /etc/apt/sources.list.d/nodesource.list 
 
     - name: Install Node.js and npm
       ansible.builtin.apt:
@@ -58,52 +54,46 @@
         global: true
         state: present
 
-    # --- Application Deployment ---
     - name: Ensure application root directory exists
       ansible.builtin.file:
         path: "{{ app_root_dir }}"
         state: directory
         owner: "{{ app_user }}"
         group: "{{ nginx_user }}"
-        mode: '0775' # Group needs write access for the build process
+        mode: '0775'
 
     - name: Transfer frontend project from local to remote
-      # NOTE: This task uses privilege escalation (become) on the DESTINATION
-      # to ensure rsync can write the files correctly.
       ansible.builtin.synchronize:
         src: "{{ local_frontend_path }}/"
         dest: "{{ app_root_dir }}"
         recursive: true
-        delete: true # Delete extraneous files on the remote
+        delete: true
         rsync_opts:
           - "--exclude=.git/"
           - "--exclude=node_modules/"
           - "--exclude=dist/"
       become: true
 
-    # --- Build Steps ---
     - name: Ensure build directory is cleared before a new build
       ansible.builtin.file:
         path: "{{ app_root_dir }}/{{ build_output_dir }}"
         state: absent
       become: true
-      # become_user: "{{ app_user }}"
 
     - name: Install pnpm dependencies
       ansible.builtin.command:
         cmd: pnpm install
         chdir: "{{ app_root_dir }}"
       become: true
-      become_user: "{{ app_user }}" # Run this specific command as the app_user
+      become_user: "{{ app_user }}"
 
     - name: Build frontend application
       ansible.builtin.command:
         cmd: pnpm build
         chdir: "{{ app_root_dir }}"
       become: true
-      become_user: "{{ app_user }}" # Run this specific command as the app_user
+      become_user: "{{ app_user }}"
 
-    # --- Nginx Configuration ---
     - name: Set correct permissions for the built assets for Nginx
       ansible.builtin.file:
         path: "{{ app_root_dir }}/{{ build_output_dir }}"
@@ -114,7 +104,7 @@
 
     - name: Configure Nginx for the frontend application
       ansible.builtin.template:
-        src: nginx.conf.j2 # Assumes you have this template file
+        src: nginx.conf.j2
         dest: "/etc/nginx/sites-available/{{ nginx_conf_name }}.conf"
       notify: Restart Nginx
 

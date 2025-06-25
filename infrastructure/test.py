@@ -13,8 +13,6 @@ def run_terraform_and_generate_hosts_file(terraform_dir=".", output_hosts_file="
     """
     print(f"--- Running terraform apply in {terraform_dir} ---")
     try:
-        # Run terraform apply. Using -auto-approve for automation.
-        # Be cautious with -auto-approve in production environments.
         apply_command = ["terraform", "apply", "-auto-approve"]
         apply_process = subprocess.run(
             apply_command,
@@ -65,7 +63,6 @@ def run_terraform_and_generate_hosts_file(terraform_dir=".", output_hosts_file="
         print("Error: 'terraform' command not found. Please ensure Terraform is installed and in your PATH.")
         return
 
-    # Prepare data for the hosts-like file
     hosts_entries = {}
 
     print("\n--- Parsing Terraform outputs for hosts file entries ---")
@@ -75,7 +72,6 @@ def run_terraform_and_generate_hosts_file(terraform_dir=".", output_hosts_file="
             print(f"Warning: Output '{key}' does not have a 'value' field or it's empty. Skipping.")
             continue
 
-        # Map Terraform output keys to hostnames
         hostname = None
         if key == "file_distributor_floating_ip":
             hostname = "file-distributor"
@@ -86,12 +82,11 @@ def run_terraform_and_generate_hosts_file(terraform_dir=".", output_hosts_file="
         elif key == "postgres_floating_ip":
             hostname = "postgres"
         elif key.startswith("storage_node_") and key.endswith("_floating_ip"):
-            # Extract a number if present in the key for uniqueness
             match = re.search(r'storage_node_(\d+)_floating_ip', key)
             if match:
                 hostname = f"storage-node{match.group(1)}"
             else:
-                hostname = f"storage-node" # Fallback if no number
+                hostname = f"storage-node" 
         elif key == "zookeeper_floating_ip":
             hostname = "zookeeper"
 
@@ -100,7 +95,6 @@ def run_terraform_and_generate_hosts_file(terraform_dir=".", output_hosts_file="
         else:
             print(f"Info: Unrecognized Terraform output key '{key}'. Skipping for hosts file.")
 
-    # Write the hosts-like file
     print(f"\n--- Writing hosts-like file to {output_hosts_file} ---")
     try:
         with open(output_hosts_file, "w") as f:
@@ -113,8 +107,4 @@ def run_terraform_and_generate_hosts_file(terraform_dir=".", output_hosts_file="
         print(f"Error writing hosts-like file: {e}")
 
 if __name__ == "__main__":
-    # You can specify the directory where your Terraform files are.
-    # By default, it assumes the script is run in the same directory as your .tf files.
-    # If your Terraform files are in a subdirectory (e.g., 'terraform/'), change this:
-    # run_terraform_and_generate_hosts_file(terraform_dir="./terraform", output_hosts_file="my_custom_hosts.txt")
     run_terraform_and_generate_hosts_file()

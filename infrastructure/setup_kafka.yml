@@ -8,13 +8,13 @@
     kafka_socket_receive_buffer_bytes: 20971520
     kafka_zookeeper_connect: zookeeper:2181
 
-    kafka_socket_request_max_bytes: 104857600 # Default is 100MB, ensure it's large enough
+    kafka_socket_request_max_bytes: 104857600
     kafka_server_config_params:
-      message.max.bytes: 20242880 # Example: 5MB (5 * 1024 * 1024 bytes)
-      replica.fetch.max.bytes: 20242880 # Should be >= message.max.bytes
+      message.max.bytes: 20242880
+      replica.fetch.max.bytes: 20242880 
 
   tasks:
-    - name: Install Java (OpenJDK 11 - a common choice)
+    - name: Install Java (OpenJDK 11)
       ansible.builtin.package:
         name: openjdk-11-jdk
         state: present
