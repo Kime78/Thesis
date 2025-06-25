@@ -16,25 +16,6 @@
       ansible.builtin.command: "/home/ubuntu/app/venv/bin/pip install -r /home/ubuntu/app/requirements.txt"
       changed_when: false
 
-    # - name: Create systemd service for file distributor using venv
-    #   ansible.builtin.copy:
-    #     dest: /etc/systemd/system/file_distributor.service
-    #     content: |
-    #       [Unit]
-    #       Description=File Distributor
-    #       After=network.target
-
-    #       [Service]
-    #       User=ubuntu
-    #       WorkingDirectory=/opt/app/
-    #       ExecStart=/opt/app/venv/bin/python main2.py
-    #       Restart=always
-    #       Environment=PATH=/opt/app/venv/bin:/usr/bin:/bin
-    #       Environment=VIRTUAL_ENV=/opt/app/venv
-
-    #       [Install]
-    #       WantedBy=multi-user.target
-    #   become: yes
     - name: Copy systemd service file on the remote host
       ansible.builtin.command: cp /home/ubuntu/app/file_downloader.service /etc/systemd/system/file_downloader.service
       become: true
