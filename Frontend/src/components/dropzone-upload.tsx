@@ -31,7 +31,7 @@ const DropzoneUpload: React.FC<DropzoneUploadProps> = ({ onFileUpload }) => {
             setUploadingFiles((prev) => [...prev, newUpload]);
 
             const formData = new FormData();
-            formData.append("uploaded_files", file); // ✅ Make sure this matches backend
+            formData.append("uploaded_files", file);
 
             console.log("Uploading:", file.name, formData.get("uploaded_files"));
 
