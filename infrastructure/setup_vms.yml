@@ -1,13 +1,12 @@
 ---
 - name: Setup Ubuntu Linux Hosts
   hosts: all
-  become: false # This playbook requires root privileges for package management
+  become: false
 
   vars:
-    # Changed app_path to use the user's home directory
     app_path: "{{ ansible_user_dir }}/app/"
-    generated_hosts_file_source: "./generated_hosts.txt" # Path to your generated_hosts.txt on the Ansible control node
-    etc_hosts_destination: "/etc/hosts" # Destination path on the remote hosts
+    generated_hosts_file_source: "./generated_hosts.txt" 
+    etc_hosts_destination: "/etc/hosts"
 
   tasks:
     - name: Install tzdata package
@@ -31,18 +30,16 @@
     - name: Update apt package cache
       ansible.builtin.apt:
         update_cache: true
-        force_apt_get: true # Use apt-get for compatibility, though apt is usually fine
+        force_apt_get: true 
       become: true
 
     - name: Upgrade all installed packages
       ansible.builtin.apt:
-        upgrade: dist # 'dist' handles dependencies intelligently
-        autoremove: true # Remove unnecessary packages
+        upgrade: dist 
+        autoremove: true 
         force_apt_get: true
       register: apt_upgrade_result
       become: true
-      # changed_when: "'0 upgraded, 0 newly installed, 0 to remove' not in apt_upgrade_result.stdout"
-      # Note: Ansible's apt module is generally good at determining changes.
 
     - name: Remove existing project files
       ansible.builtin.file:
@@ -53,7 +50,7 @@
     - name: Install Python 3.12 venv and pip
       ansible.builtin.apt:
         name:
-          - python3.12 # Specify Python 3.12 venv package
+          - python3.12 
           - python3.12-venv
           - python3.12-dev
         state: present
@@ -67,17 +64,13 @@
         name: python3-pip 
         state: absent
       become: true
-    
-
-
 
     - name: Create Python 3.12 virtual environment
       ansible.builtin.command: python3.12 -m venv {{ app_path }}venv
       args:
-        creates: "{{ app_path }}venv/bin/activate" # Only run if venv doesn't exist
+        creates: "{{ app_path }}venv/bin/activate"
       register: venv_creation_result
-      changed_when: venv_creation_result.rc == 0 # Check return code for changes
-      # Note: Using python3.12 explicitly to ensure the correct Python version is used.
+      changed_when: venv_creation_result.rc == 0
 
     - name: Upgrade pip within the virtual environment
       ansible.builtin.command: "{{ app_path }}/venv/bin/pip install --upgrade pip"
@@ -99,6 +92,3 @@
         group: root
         mode: "0644"
       become: true
-      # IMPORTANT: This will OVERWRITE the existing /etc/hosts file.
-      # Ensure generated_hosts.txt contains all necessary entries, including localhost.
-      # If you need to preserve existing entries, consider using 'lineinfile' or 'blockinfile'.

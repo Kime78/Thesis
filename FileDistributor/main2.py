@@ -34,7 +34,6 @@ logger.info(f"GOT REPLICATION FACTOR = {os.getenv('REPLICATION_FACTOR', '3')}")
 
 
 def parse_received_data(received_data: bytes):
-    """Parse Kafka message into metadata and chunk"""
     try:
         metadata_encoded, chunk = received_data.split(b"\n\n----METADATA----\n\n", 1)
         metadata_json = base64.b64decode(metadata_encoded).decode("utf-8")
@@ -154,9 +153,8 @@ class CombinedResourceReplicationAlgorithm(ResourceBasedReplicationAlgorithm):
         self, cpu_weight: float = 0.4, ram_weight: float = 0.3, disk_weight: float = 0.3
     ) -> None:
         super().__init__()
-        # Ensure weights sum to 1.0 (or close enough due to float precision)
         total_weight = cpu_weight + ram_weight + disk_weight
-        if not (0.99 <= total_weight <= 1.01):  # Allow for small float inaccuracies
+        if not (0.99 <= total_weight <= 1.01):
             logger.warning(f"Weights do not sum to 1.0. Normalizing: {total_weight}")
             cpu_weight /= total_weight
             ram_weight /= total_weight
@@ -178,7 +176,7 @@ class CombinedResourceReplicationAlgorithm(ResourceBasedReplicationAlgorithm):
 
         available_resources_with_indices = []
         for i, nr in enumerate(self.node_resources):
-            if nr:  # Ensure resource data was successfully fetched for this node
+            if nr:
                 available_resources_with_indices.append((i, nr))
 
         if not available_resources_with_indices:
@@ -187,29 +185,24 @@ class CombinedResourceReplicationAlgorithm(ResourceBasedReplicationAlgorithm):
             )
             return random.choice(self.nodes)
 
-        best_score = float("-inf")  # We want to maximize this score
+        best_score = float("-inf")
         best_node_index = -1
 
         for index, node_resource in available_resources_with_indices:
-            # Normalize CPU usage: lower usage is better, so (1 - usage_percent) gives a higher score for lower usage.
             normalized_cpu = 1.0 - node_resource.cpu.usage_percent
 
-            # Normalize RAM availability: higher available is better. Avoid division by zero.
             normalized_ram = (
                 node_resource.ram.available / node_resource.ram.total
                 if node_resource.ram.total > 0
                 else 0.0
             )
 
-            # Normalize Disk free space: higher free is better. Avoid division by zero.
             normalized_disk = (
                 node_resource.disk.free / node_resource.disk.total
                 if node_resource.disk.total > 0
                 else 0.0
             )
 
-            # Calculate combined score for this node
-            # A higher score indicates a more suitable node
             current_score = (
                 self.cpu_weight * normalized_cpu
                 + self.ram_weight * normalized_ram
@@ -242,7 +235,6 @@ class CombinedResourceReplicationAlgorithm(ResourceBasedReplicationAlgorithm):
 
 
 async def send_to_storage_node(message: bytes) -> str:
-    """Send chunk to storage node via gRPC"""
     metadata, chunk_data = parse_received_data(message)
 
     logger.info(f"Attempting to send chunk {metadata}")
@@ -270,7 +262,6 @@ async def process_message(message, db):
         metadata["storage_node"] = replcation_algorithm.choose_node()
         rr = (rr + 1) % len(nodes)
         logger.info(f"Chosen storage node: {metadata['storage_node']}")
-        # Save initial metadata with "pending" status
         metadata["status"] = "pending"
         metadata["stored_at"] = None
 
@@ -278,12 +269,9 @@ async def process_message(message, db):
         await db.execute(query)
 
         try:
-            # Send to storage node
             m = base64.b64encode(json.dumps(metadata).encode()).decode()
             chunk_with_metadata = f"{m}\n\n----METADATA----\n\n".encode() + chunk
             await send_to_storage_node(chunk_with_metadata)
-            logger.info("Am ajuns aici 1")
-            # Update status to "stored"
             query = (
                 file_metadata.update()
                 .where(file_metadata.c.chunk_uuid == metadata["chunk_uuid"])
@@ -292,7 +280,6 @@ async def process_message(message, db):
             await db.execute(query)
 
         except Exception as e:
-            # Update status to "failed"
             query = (
                 file_metadata.update()
                 .where(file_metadata.c.chunk_uuid == metadata["chunk_uuid"])
@@ -305,7 +292,6 @@ async def process_message(message, db):
 async def main():
     await database.connect()
     await create_tables()
-    # file_metadata.create()
     consumer = AIOKafkaConsumer(
         "file-chunks",
         bootstrap_servers="kafka:9092",

@@ -1,4 +1,3 @@
-# Remove peewee, use async database library
 from datetime import datetime
 from databases import Database
 from sqlalchemy import MetaData, Table, Column, Integer, String, DateTime

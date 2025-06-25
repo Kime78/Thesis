@@ -88,15 +88,6 @@ async def show_files():
 
 @app.get("/status/{file_uuid}")
 async def get_file_upload_status(file_uuid: str):
-    """
-    Retrieves the upload status of a file.
-
-    Args:
-        file_uuid: The UUID of the file to check.
-
-    Returns:
-        A JSON response indicating the file status.
-    """
     async with async_session() as session:
         stmt = (
             select(FileMetadata)
@@ -116,7 +107,6 @@ async def get_file_upload_status(file_uuid: str):
             )
 
         file = files[0]
-        # Ensure floating point division for accuracy
         supposed_nr_chunks = (math.ceil(file.file_size / float(file.chunk_size))) * 3
 
         if supposed_nr_chunks != len(files):
@@ -177,14 +167,10 @@ async def download_files(req: DownloadRequest):
 
     file_like = io.BytesIO(combined_data)
 
-    # Ensure a fallback filename if it's somehow None or empty
     filename = files[0].file_name or "downloaded_file"
 
-    # URL-encode the filename to handle special characters safely
     encoded_filename = quote(filename)
 
-    # Use the RFC 5987 compliant format for the Content-Disposition header
-    # This provides the best cross-browser compatibility for non-ASCII filenames.
     content_disposition_header = f"attachment; filename*=UTF-8''{encoded_filename}"
     logger.info("Sending response")
     return StreamingResponse(

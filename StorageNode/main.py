@@ -13,7 +13,6 @@ from fastapi import FastAPI
 import chunk_pb2
 import chunk_pb2_grpc
 
-# ---------------- Logging Setup ----------------
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -21,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 chunk_dir = '/home/ubuntu/app/chunks'
 
-# ---------------- FastAPI App ----------------
 app = FastAPI()
 
 @app.get("/system-status")
@@ -52,9 +50,7 @@ def start_fastapi():
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
 
 
-# ---------------- gRPC Code ----------------
 def parse_received_data(received_data: bytes):
-    """Parse Kafka message into metadata and chunk"""
     try:
         logger.info("Parsing chunk..")
         metadata_encoded, chunk = received_data.split(b"\n\n----METADATA----\n\n", 1)
@@ -89,8 +85,6 @@ class StorageService(chunk_pb2_grpc.ChunkServiceServicer):
             data = f.read()
         return chunk_pb2.ChunkResponse(data=data, success=True)
 
-    
-
 def serve_grpc():
     server = grpc.server(
         futures.ThreadPoolExecutor(max_workers=10),
@@ -105,10 +99,6 @@ def serve_grpc():
     logger.info("Storage node ready on port 50051")
     server.wait_for_termination()
 
-
-# ---------------- Entry Point ----------------
 if __name__ == "__main__":
-    # Start FastAPI in a separate thread
     threading.Thread(target=start_fastapi, daemon=True).start()
-    # Start gRPC server
     serve_grpc()

@@ -3,7 +3,7 @@
   hosts: zookeepers
 
   tasks:
-    - name: Install Java (OpenJDK 11 - a common choice)
+    - name: Install Java (OpenJDK 11)
       ansible.builtin.package:
         name: openjdk-11-jdk
         state: present
