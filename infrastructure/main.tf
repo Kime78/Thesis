@@ -2,539 +2,83 @@ terraform {
   required_providers {
     openstack = {
       source  = "terraform-provider-openstack/openstack"
-      version = ">= 1.0.0"
+      version = ">= 1.49.0"
     }
   }
 }
 
 provider "openstack" {
-  cloud = "openstack" # Match this with the entry in clouds.yaml
+  cloud = "openstack"
+}
+
+variable "public_key_file" {
+  description = "Path to the public key file to be used for the instances."
+  default     = "~/.ssh/id_rsa.pub"
+}
+
+resource "openstack_compute_keypair_v2" "terraform_key" {
+  name       = "terraform-key"
+  public_key = file(var.public_key_file)
 }
 
 data "openstack_networking_network_v2" "licenta_net" {
   name = "licenta"
 }
 
-resource "openstack_networking_port_v2" "file_distributor_port" {
-  name           = "file_distributor_port"
+locals {
+  instance_names = [
+    "file_distributor",
+    "file_receiver",
+    "file_receiver2",
+    "file_receiver3",
+    "frontend",
+    "load_balancer",
+    "test",
+    "file_downloader",
+    "kafka",
+    "zookeeper",
+    "postgres",
+    "storage_node_1",
+    "storage_node_2",
+    "storage_node_3",
+    "storage_node_4",
+  ]
+}
+
+resource "openstack_networking_port_v2" "ports" {
+  count          = length(local.instance_names)
+  name           = "${local.instance_names[count.index]}_port"
   network_id     = data.openstack_networking_network_v2.licenta_net.id
   admin_state_up = "true"
 }
 
-resource "openstack_networking_port_v2" "file_distributor2_port" {
-  name           = "file_distributor2_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
+resource "openstack_networking_floatingip_v2" "fips" {
+  count = length(local.instance_names)
+  pool  = "public"
 }
 
-resource "openstack_networking_port_v2" "file_distributor3_port" {
-  name           = "file_distributor3_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-}
-
-resource "openstack_networking_port_v2" "frontend_port" {
-  name           = "frontend_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-}
-
-resource "openstack_networking_port_v2" "load_balancer_port" {
-  name           = "load_balancer_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-}
-
-resource "openstack_networking_port_v2" "test_port" {
-  name           = "test_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-}
-
-resource "openstack_networking_port_v2" "file_receiver_port" {
-  name           = "file_receiver_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-}
-
-resource "openstack_networking_port_v2" "file_receiver2_port" {
-  name           = "file_receiver2_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-}
-
-resource "openstack_networking_port_v2" "file_receiver3_port" {
-  name           = "file_receiver3_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-}
-
-resource "openstack_networking_port_v2" "file_downloader_port" {
-  name           = "file_downloader_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-}
-
-resource "openstack_networking_port_v2" "kafka_port" {
-  name           = "kafka_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-}
-
-resource "openstack_networking_port_v2" "zookeeper_port" {
-  name           = "zookeeper_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-
-}
-
-resource "openstack_networking_port_v2" "postgres_port" {
-  name           = "postgres_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-
-}
-
-resource "openstack_networking_port_v2" "storage_node_1_port" {
-  name           = "storage_node_1_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-
-}
-
-resource "openstack_networking_port_v2" "storage_node_2_port" {
-  name           = "storage_node_2_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-
-}
-
-resource "openstack_networking_port_v2" "storage_node_3_port" {
-  name           = "storage_node_3_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-
-}
-
-resource "openstack_networking_port_v2" "storage_node_4_port" {
-  name           = "storage_node_4_port"
-  network_id     = data.openstack_networking_network_v2.licenta_net.id
-  admin_state_up = "true"
-
-}
-
-resource "openstack_networking_floatingip_v2" "file_downloader_fip" {
-  pool = "public" # Change to your external network name
-}
-
-resource "openstack_networking_floatingip_v2" "file_distributor_fip" {
-  pool = "public" # Change to your external network name
-}
-
-resource "openstack_networking_floatingip_v2" "file_distributor2_fip" {
-  pool = "public" # Change to your external network name
-}
-
-resource "openstack_networking_floatingip_v2" "file_distributor3_fip" {
-  pool = "public" # Change to your external network name
-}
-
-resource "openstack_networking_floatingip_v2" "file_receiver_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "file_receiver2_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "file_receiver3_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "test_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "frontend_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "load_balancer_fip" {
-  pool = "public"
-}
-
-
-resource "openstack_networking_floatingip_v2" "kafka_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "zookeeper_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "postgres_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "storage_node_1_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "storage_node_2_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "storage_node_3_fip" {
-  pool = "public"
-}
-
-resource "openstack_networking_floatingip_v2" "storage_node_4_fip" {
-  pool = "public"
-}
-
-
-resource "openstack_compute_instance_v2" "file_distributor" {
-  name        = "file_distributor"
+resource "openstack_compute_instance_v2" "instances" {
+  count       = length(local.instance_names)
+  name        = local.instance_names[count.index]
   image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  # security_groups are now managed by the port
+  flavor_name = contains(["kafka", "zookeeper"], local.instance_names[count.index]) ? "m1.medium" : "m1.small"
+  key_pair    = openstack_compute_keypair_v2.terraform_key.name
+
   network {
-    port = openstack_networking_port_v2.file_distributor_port.id
+    port = openstack_networking_port_v2.ports[count.index].id
   }
 }
 
-resource "openstack_compute_instance_v2" "file_distributor2" {
-  name        = "file_distributor2"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  # security_groups are now managed by the port
-  network {
-    port = openstack_networking_port_v2.file_distributor2_port.id
+resource "openstack_networking_floatingip_associate_v2" "fip_assocs" {
+  count       = length(local.instance_names)
+  floating_ip = openstack_networking_floatingip_v2.fips[count.index].address
+  port_id     = openstack_networking_port_v2.ports[count.index].id
+}
+
+output "instance_floating_ips" {
+  description = "Floating IPs of all instances"
+  value = {
+    for i in range(length(local.instance_names)) :
+    local.instance_names[i] => openstack_networking_floatingip_v2.fips[i].address
   }
 }
-
-resource "openstack_compute_instance_v2" "file_distributor3" {
-  name        = "file_distributor3"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  # security_groups are now managed by the port
-  network {
-    port = openstack_networking_port_v2.file_distributor3_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "file_downloader" {
-  name        = "file_downloader"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  # security_groups are now managed by the port
-  network {
-    port = openstack_networking_port_v2.file_downloader_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "file_receiver" {
-  name        = "file_receiver"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.file_receiver_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "file_receiver2" {
-  name        = "file_receiver2"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.file_receiver2_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "file_receiver3" {
-  name        = "file_receiver3"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.file_receiver3_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "frontend" {
-  name        = "frontend"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.frontend_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "load_balancer" {
-  name        = "load_balancer"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.load_balancer_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "test" {
-  name        = "test"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.test_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "kafka" {
-  name        = "kafka"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.medium"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.kafka_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "zookeeper" {
-  name        = "zookeeper"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.medium"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.zookeeper_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "postgres" {
-  name        = "postgres"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.postgres_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "storage_node_1" {
-  name        = "storage_node_1"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.storage_node_1_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "storage_node_2" {
-  name        = "storage_node_2"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.storage_node_2_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "storage_node_3" {
-  name        = "storage_node_3"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.storage_node_3_port.id
-  }
-}
-
-resource "openstack_compute_instance_v2" "storage_node_4" {
-  name        = "storage_node_4"
-  image_name  = "Ubuntu Focal"
-  flavor_name = "m1.small"
-  key_pair    = "terraform"
-  network {
-    port = openstack_networking_port_v2.storage_node_4_port.id
-  }
-}
-
-resource "openstack_networking_floatingip_associate_v2" "file_distributor_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.file_distributor_fip.address
-  port_id     = openstack_networking_port_v2.file_distributor_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "file_distributor2_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.file_distributor2_fip.address
-  port_id     = openstack_networking_port_v2.file_distributor2_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "file_distributor3_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.file_distributor3_fip.address
-  port_id     = openstack_networking_port_v2.file_distributor3_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "file_receiver_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.file_receiver_fip.address
-  port_id     = openstack_networking_port_v2.file_receiver_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "file_receiver2_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.file_receiver2_fip.address
-  port_id     = openstack_networking_port_v2.file_receiver2_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "file_receiver3_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.file_receiver3_fip.address
-  port_id     = openstack_networking_port_v2.file_receiver3_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "frontend_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.frontend_fip.address
-  port_id     = openstack_networking_port_v2.frontend_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "load_balancer_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.load_balancer_fip.address
-  port_id     = openstack_networking_port_v2.load_balancer_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "test_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.test_fip.address
-  port_id     = openstack_networking_port_v2.test_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "file_downloader_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.file_downloader_fip.address
-  port_id     = openstack_networking_port_v2.file_downloader_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "kafka_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.kafka_fip.address
-  port_id     = openstack_networking_port_v2.kafka_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "zookeeper_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.zookeeper_fip.address
-  port_id     = openstack_networking_port_v2.zookeeper_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "postgres_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.postgres_fip.address
-  port_id     = openstack_networking_port_v2.postgres_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "storage_node_1_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.storage_node_1_fip.address
-  port_id     = openstack_networking_port_v2.storage_node_1_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "storage_node_2_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.storage_node_2_fip.address
-  port_id     = openstack_networking_port_v2.storage_node_2_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "storage_node_3_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.storage_node_3_fip.address
-  port_id     = openstack_networking_port_v2.storage_node_3_port.id
-}
-
-resource "openstack_networking_floatingip_associate_v2" "storage_node_4_assoc" {
-  floating_ip = openstack_networking_floatingip_v2.storage_node_4_fip.address
-  port_id     = openstack_networking_port_v2.storage_node_4_port.id
-}
-
-# --- Outputs for Floating IPs ---
-output "file_distributor_floating_ip" {
-  description = "Floating IP of the file_distributor instance"
-  value       = openstack_networking_floatingip_v2.file_distributor_fip.address
-}
-
-output "file_distributor2_floating_ip" {
-  description = "Floating IP of the file_distributor instance"
-  value       = openstack_networking_floatingip_v2.file_distributor2_fip.address
-}
-
-output "file_distributor3_floating_ip" {
-  description = "Floating IP of the file_distributor instance"
-  value       = openstack_networking_floatingip_v2.file_distributor3_fip.address
-}
-
-output "file_receiver_floating_ip" {
-  description = "Floating IP of the file_receiver instance"
-  value       = openstack_networking_floatingip_v2.file_receiver_fip.address
-}
-
-output "file_receiver2_floating_ip" {
-  description = "Floating IP of the file_receiver instance"
-  value       = openstack_networking_floatingip_v2.file_receiver2_fip.address
-}
-
-output "file_receiver3_floating_ip" {
-  description = "Floating IP of the file_receiver instance"
-  value       = openstack_networking_floatingip_v2.file_receiver3_fip.address
-}
-
-output "load_balancer_floating_ip" {
-  description = "Floating IP of the file_receiver instance"
-  value       = openstack_networking_floatingip_v2.load_balancer_fip.address
-}
-
-output "frontend_floating_ip" {
-  description = "Floating IP of the file_receiver instance"
-  value       = openstack_networking_floatingip_v2.frontend_fip.address
-}
-
-output "test_floating_ip" {
-  description = "Floating IP of the file_receiver instance"
-  value       = openstack_networking_floatingip_v2.test_fip.address
-}
-
-output "file_downloader_floating_ip" {
-  description = "Floating IP of the file_receiver instance"
-  value       = openstack_networking_floatingip_v2.file_downloader_fip.address
-}
-
-output "kafka_floating_ip" {
-  description = "Floating IP of the kafka instance"
-  value       = openstack_networking_floatingip_v2.kafka_fip.address
-}
-
-output "zookeeper_floating_ip" {
-  description = "Floating IP of the zookeeper instance"
-  value       = openstack_networking_floatingip_v2.zookeeper_fip.address
-}
-
-output "postgres_floating_ip" {
-  description = "Floating IP of the postgres instance"
-  value       = openstack_networking_floatingip_v2.postgres_fip.address
-}
-
-output "storage_node_1_floating_ip" {
-  description = "Floating IP of the storage_node_1 instance"
-  value       = openstack_networking_floatingip_v2.storage_node_1_fip.address
-}
-
-output "storage_node_2_floating_ip" {
-  description = "Floating IP of the storage_node_2 instance"
-  value       = openstack_networking_floatingip_v2.storage_node_2_fip.address
-}
-
-output "storage_node_3_floating_ip" {
-  description = "Floating IP of the storage_node_3 instance"
-  value       = openstack_networking_floatingip_v2.storage_node_3_fip.address
-}
-
-output "storage_node_4_floating_ip" {
-  description = "Floating IP of the storage_node_4 instance"
-  value       = openstack_networking_floatingip_v2.storage_node_4_fip.address
-}
-
