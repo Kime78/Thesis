@@ -9,6 +9,17 @@
     etc_hosts_destination: "/etc/hosts"
 
   tasks:
+    - name: Install tzdata package
+      ansible.builtin.apt:
+        name: tzdata
+        state: present
+      become: true
+
+    - name: Set timezone Europe/Bucharest
+      community.general.timezone:
+        name: Europe/Bucharest
+      become: true
+
     - name: Add deadsnakes PPA for newer Python versions
       ansible.builtin.apt_repository:
         repo: ppa:deadsnakes/ppa
