@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x63hunk.proto\x12\x03\x64\x66s\"!\n\x05\x43hunk\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04\x64\x61ta\x18\x02 \x01(\x0c\"1\n\rStoreResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"\"\n\x0c\x43hunkRequest\x12\x12\n\nchunk_uuid\x18\x01 \x01(\t\".\n\rChunkResponse\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\x0f\n\x07success\x18\x02 \x01(\x08\x32\xa9\x01\n\x0c\x43hunkService\x12.\n\nStoreChunk\x12\n.dfs.Chunk\x1a\x12.dfs.StoreResponse\"\x00\x12\x36\n\x10StoreChunkStream\x12\n.dfs.Chunk\x1a\x12.dfs.StoreResponse\"\x00(\x01\x12\x31\n\x08GetChunk\x12\x11.dfs.ChunkRequest\x1a\x12.dfs.ChunkResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0b\x63hunk.proto\x12\x03\x64\x66s\"!\n\x05\x43hunk\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04\x64\x61ta\x18\x02 \x01(\x0c\"1\n\rStoreResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"\"\n\x0c\x43hunkRequest\x12\x12\n\nchunk_uuid\x18\x01 \x01(\t\".\n\rChunkResponse\x12\x0c\n\x04\x64\x61ta\x18\x01 \x01(\x0c\x12\x0f\n\x07success\x18\x02 \x01(\x08\"2\n\x0e\x44\x65leteResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t2\xe0\x01\n\x0c\x43hunkService\x12.\n\nStoreChunk\x12\n.dfs.Chunk\x1a\x12.dfs.StoreResponse\"\x00\x12\x36\n\x10StoreChunkStream\x12\n.dfs.Chunk\x1a\x12.dfs.StoreResponse\"\x00(\x01\x12\x31\n\x08GetChunk\x12\x11.dfs.ChunkRequest\x1a\x12.dfs.ChunkResponse\x12\x35\n\x0b\x44\x65leteChunk\x12\x11.dfs.ChunkRequest\x1a\x13.dfs.DeleteResponseb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -39,6 +39,8 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CHUNKREQUEST']._serialized_end=140
   _globals['_CHUNKRESPONSE']._serialized_start=142
   _globals['_CHUNKRESPONSE']._serialized_end=188
-  _globals['_CHUNKSERVICE']._serialized_start=191
-  _globals['_CHUNKSERVICE']._serialized_end=360
+  _globals['_DELETERESPONSE']._serialized_start=190
+  _globals['_DELETERESPONSE']._serialized_end=240
+  _globals['_CHUNKSERVICE']._serialized_start=243
+  _globals['_CHUNKSERVICE']._serialized_end=467
 # @@protoc_insertion_point(module_scope)

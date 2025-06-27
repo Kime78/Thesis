@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
-from sqlmodel import select
+from sqlmodel import select, delete
 from urllib.parse import quote
 
 from db import async_session, engine
@@ -57,7 +57,7 @@ async def fetch_chunk(chunk_uuid: str, node_address: str, chunk_hash: str) -> by
         f"{node_address}", options=channel_options
     ) as channel:
         stub = chunk_pb2_grpc.ChunkServiceStub(channel)
-        response = await stub.GetChunk(chunk_pb2.ChunkRequest(chunk_uuid=chunk_uuid))
+        response = await stub.GetChunk(chunk_pb2.ChunkRequest(chunk_uuid=chunk_uuid))  # type: ignore
         logger.info(f"Downloaded chunk {chunk_uuid} from {node_address}")
         downloaded_hash = hashlib.sha256(response.data).hexdigest()
         if downloaded_hash != chunk_hash:
@@ -69,6 +69,31 @@ async def fetch_chunk(chunk_uuid: str, node_address: str, chunk_hash: str) -> by
                 f"Failed to download chunk {chunk_uuid} from {node_address}"
             )
         return response.data
+
+
+async def delete_chunk(chunk_uuid: str, node_address: str) -> bool:
+    """Helper function to send a DeleteChunk RPC to a storage node."""
+    async with grpc.aio.insecure_channel(f"{node_address}") as channel:
+        stub = chunk_pb2_grpc.ChunkServiceStub(channel)
+        try:
+            response = await stub.DeleteChunk(
+                chunk_pb2.ChunkRequest(chunk_uuid=chunk_uuid)
+            )
+            if response.success:
+                logger.info(
+                    f"Successfully deleted chunk {chunk_uuid} from {node_address}"
+                )
+                return True
+            else:
+                logger.warning(
+                    f"Failed to delete chunk {chunk_uuid} from {node_address}: {response.message}"
+                )
+                return False
+        except grpc.aio.AioRpcError as e:
+            logger.error(
+                f"RPC error deleting chunk {chunk_uuid} from {node_address}: {e}"
+            )
+            return False
 
 
 from fastapi.responses import StreamingResponse
@@ -177,4 +202,74 @@ async def download_files(req: DownloadRequest):
         file_like,
         media_type="application/octet-stream",
         headers={"Content-Disposition": content_disposition_header},
+    )
+
+
+@app.delete("/files/{file_uuid}")
+async def delete_single_file(file_uuid: str):
+    """Deletes a single file and all its associated chunks."""
+    async with async_session() as session:
+        # Find all metadata entries for the given file UUID
+        stmt = select(FileMetadata).where(FileMetadata.file_uuid == file_uuid)
+        result = await session.exec(stmt)
+        file_metadatas = list(result.all())
+
+        if not file_metadatas:
+            raise HTTPException(
+                status_code=404, detail=f"File with UUID '{file_uuid}' not found."
+            )
+
+        # Create tasks to delete each chunk from its storage node
+        delete_tasks = [
+            delete_chunk(meta.chunk_uuid, meta.storage_node) for meta in file_metadatas
+        ]
+        results = await asyncio.gather(*delete_tasks)
+
+        # Optional: Check if all deletions were successful
+        if not all(results):
+            logger.warning(
+                f"Failed to delete some chunks for file {file_uuid}. Proceeding to delete metadata anyway."
+            )
+
+        # Delete all metadata entries for this file from the database
+        delete_stmt = delete(FileMetadata).where(FileMetadata.file_uuid == file_uuid)
+        await session.exec(delete_stmt)
+        await session.commit()
+
+    return JSONResponse(
+        status_code=200,
+        content={"message": f"File {file_uuid} and its chunks have been deleted."},
+    )
+
+
+@app.delete("/files")
+async def delete_all_files():
+    """Deletes all files and all their chunks from the system."""
+    async with async_session() as session:
+        # Get all file metadata from the database
+        stmt = select(FileMetadata)
+        result = await session.exec(stmt)
+        all_metadatas = list(result.all())
+
+        if not all_metadatas:
+            return JSONResponse(
+                status_code=200,
+                content={"message": "No files found to delete."},
+            )
+
+        # Create tasks to delete every chunk from its respective storage node
+        delete_tasks = [
+            delete_chunk(meta.chunk_uuid, meta.storage_node) for meta in all_metadatas
+        ]
+        await asyncio.gather(*delete_tasks)
+        logger.info("All chunk deletion tasks completed. Now clearing database.")
+
+        # Delete all metadata from the table
+        delete_stmt = delete(FileMetadata)
+        await session.exec(delete_stmt)
+        await session.commit()
+
+    return JSONResponse(
+        status_code=200,
+        content={"message": "All files and chunks have been deleted from the system."},
     )

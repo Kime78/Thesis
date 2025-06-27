@@ -9,7 +9,11 @@ service ChunkService {
   // Client-side streaming for batches
   rpc StoreChunkStream(stream Chunk) returns (StoreResponse) {};
 
+  // RPC to get a chunk
   rpc GetChunk (ChunkRequest) returns (ChunkResponse);
+
+  // RPC to delete a chunk
+  rpc DeleteChunk (ChunkRequest) returns (DeleteResponse);
 }
 
 message Chunk {
@@ -29,4 +33,9 @@ message ChunkRequest {
 message ChunkResponse {
   bytes data = 1;
   bool success = 2;
+}
+
+message DeleteResponse {
+  bool success = 1;
+  string message = 2;
 }

@@ -18,33 +18,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-chunk_dir = '/home/ubuntu/app/chunks'
+chunk_dir = "/home/ubuntu/app/chunks"
 
 app = FastAPI()
+
 
 @app.get("/system-status")
 def get_system_status():
     cpu_percent = psutil.cpu_percent(interval=1)
     virtual_mem = psutil.virtual_memory()
-    disk_usage = psutil.disk_usage('/')
+    disk_usage = psutil.disk_usage("/")
 
     return {
-        "cpu": {
-            "usage_percent": cpu_percent
-        },
+        "cpu": {"usage_percent": cpu_percent},
         "ram": {
             "total": virtual_mem.total,
             "used": virtual_mem.used,
             "available": virtual_mem.available,
-            "usage_percent": virtual_mem.percent
+            "usage_percent": virtual_mem.percent,
         },
         "disk": {
             "total": disk_usage.total,
             "used": disk_usage.used,
             "free": disk_usage.free,
-            "usage_percent": disk_usage.percent
-        }
+            "usage_percent": disk_usage.percent,
+        },
     }
+
 
 def start_fastapi():
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
@@ -61,10 +61,11 @@ def parse_received_data(received_data: bytes):
         logger.error("Failed to parse message data")
         raise
 
+
 class StorageService(chunk_pb2_grpc.ChunkServiceServicer):
     def StoreChunk(self, request, context):
         metadata, chunk = parse_received_data(request.data)
-        logger.info('=====================')
+        logger.info("=====================")
         logger.info(chunk_dir)
         logger.info(f"Stored chunk {metadata} ({len(chunk)} bytes)")
         if not os.path.exists(f"{chunk_dir}"):
@@ -74,7 +75,7 @@ class StorageService(chunk_pb2_grpc.ChunkServiceServicer):
         with open(f"{chunk_dir}/" + metadata["chunk_uuid"], "wb") as chunk_file:
             chunk_file.write(chunk)
         return chunk_pb2.StoreResponse(success=True)
-    
+
     def GetChunk(self, request, context):
         chunk_path = f"{chunk_dir}/{request.chunk_uuid}"
         if not os.path.exists(chunk_path):
@@ -84,6 +85,27 @@ class StorageService(chunk_pb2_grpc.ChunkServiceServicer):
         with open(chunk_path, "rb") as f:
             data = f.read()
         return chunk_pb2.ChunkResponse(data=data, success=True)
+
+    def DeleteChunk(self, request, context):
+        chunk_path = f"{chunk_dir}/{request.chunk_uuid}"
+        logger.info(f"Attempting to delete chunk: {request.chunk_uuid}")
+        if not os.path.exists(chunk_path):
+            logger.warning(f"Delete failed: Chunk not found: {request.chunk_uuid}")
+            return chunk_pb2.DeleteResponse(
+                success=False, message=f"Chunk not found: {request.chunk_uuid}"
+            )
+        try:
+            os.remove(chunk_path)
+            logger.info(f"Successfully deleted chunk: {request.chunk_uuid}")
+            return chunk_pb2.DeleteResponse(
+                success=True, message="Chunk deleted successfully."
+            )
+        except OSError as e:
+            logger.error(f"Error deleting chunk {request.chunk_uuid}: {e}")
+            return chunk_pb2.DeleteResponse(
+                success=False, message=f"Error deleting chunk: {e}"
+            )
+
 
 def serve_grpc():
     server = grpc.server(
@@ -98,6 +120,7 @@ def serve_grpc():
     server.start()
     logger.info("Storage node ready on port 50051")
     server.wait_for_termination()
+
 
 if __name__ == "__main__":
     threading.Thread(target=start_fastapi, daemon=True).start()

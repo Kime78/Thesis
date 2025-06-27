@@ -49,6 +49,11 @@ class ChunkServiceStub(object):
                 request_serializer=chunk__pb2.ChunkRequest.SerializeToString,
                 response_deserializer=chunk__pb2.ChunkResponse.FromString,
                 _registered_method=True)
+        self.DeleteChunk = channel.unary_unary(
+                '/dfs.ChunkService/DeleteChunk',
+                request_serializer=chunk__pb2.ChunkRequest.SerializeToString,
+                response_deserializer=chunk__pb2.DeleteResponse.FromString,
+                _registered_method=True)
 
 
 class ChunkServiceServicer(object):
@@ -69,7 +74,15 @@ class ChunkServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetChunk(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """RPC to get a chunk
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def DeleteChunk(self, request, context):
+        """RPC to delete a chunk
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -91,6 +104,11 @@ def add_ChunkServiceServicer_to_server(servicer, server):
                     servicer.GetChunk,
                     request_deserializer=chunk__pb2.ChunkRequest.FromString,
                     response_serializer=chunk__pb2.ChunkResponse.SerializeToString,
+            ),
+            'DeleteChunk': grpc.unary_unary_rpc_method_handler(
+                    servicer.DeleteChunk,
+                    request_deserializer=chunk__pb2.ChunkRequest.FromString,
+                    response_serializer=chunk__pb2.DeleteResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -174,6 +192,33 @@ class ChunkService(object):
             '/dfs.ChunkService/GetChunk',
             chunk__pb2.ChunkRequest.SerializeToString,
             chunk__pb2.ChunkResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def DeleteChunk(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/dfs.ChunkService/DeleteChunk',
+            chunk__pb2.ChunkRequest.SerializeToString,
+            chunk__pb2.DeleteResponse.FromString,
             options,
             channel_credentials,
             insecure,
