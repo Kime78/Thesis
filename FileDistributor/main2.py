@@ -65,11 +65,12 @@ class RandomReplicationAlgorithm(ReplicationAlgorithm):
 class RoundRobinReplicationAlgorithm(ReplicationAlgorithm):
     def __init__(self) -> None:
         super().__init__()
-        self.round_robin = 0
+        global rr
 
     def choose_node(self) -> str:
-        result = self.nodes[self.round_robin]
-        self.round_robin = (self.round_robin + 1) % len(self.nodes)
+        global rr
+        result = self.nodes[rr]
+        rr = (rr + 1) % len(self.nodes)
         return result
 
 
