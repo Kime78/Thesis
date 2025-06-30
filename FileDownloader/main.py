@@ -209,7 +209,6 @@ async def download_files(req: DownloadRequest):
 async def delete_single_file(file_uuid: str):
     """Deletes a single file and all its associated chunks."""
     async with async_session() as session:
-        # Find all metadata entries for the given file UUID
         stmt = select(FileMetadata).where(FileMetadata.file_uuid == file_uuid)
         result = await session.exec(stmt)
         file_metadatas = list(result.all())
@@ -218,20 +217,16 @@ async def delete_single_file(file_uuid: str):
             raise HTTPException(
                 status_code=404, detail=f"File with UUID '{file_uuid}' not found."
             )
-
-        # Create tasks to delete each chunk from its storage node
         delete_tasks = [
             delete_chunk(meta.chunk_uuid, meta.storage_node) for meta in file_metadatas
         ]
         results = await asyncio.gather(*delete_tasks)
 
-        # Optional: Check if all deletions were successful
         if not all(results):
             logger.warning(
                 f"Failed to delete some chunks for file {file_uuid}. Proceeding to delete metadata anyway."
             )
 
-        # Delete all metadata entries for this file from the database
         delete_stmt = delete(FileMetadata).where(FileMetadata.file_uuid == file_uuid)
         await session.exec(delete_stmt)
         await session.commit()
@@ -246,7 +241,6 @@ async def delete_single_file(file_uuid: str):
 async def delete_all_files():
     """Deletes all files and all their chunks from the system."""
     async with async_session() as session:
-        # Get all file metadata from the database
         stmt = select(FileMetadata)
         result = await session.exec(stmt)
         all_metadatas = list(result.all())
@@ -257,14 +251,12 @@ async def delete_all_files():
                 content={"message": "No files found to delete."},
             )
 
-        # Create tasks to delete every chunk from its respective storage node
         delete_tasks = [
             delete_chunk(meta.chunk_uuid, meta.storage_node) for meta in all_metadatas
         ]
         await asyncio.gather(*delete_tasks)
         logger.info("All chunk deletion tasks completed. Now clearing database.")
 
-        # Delete all metadata from the table
         delete_stmt = delete(FileMetadata)
         await session.exec(delete_stmt)
         await session.commit()
