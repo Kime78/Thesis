@@ -259,9 +259,8 @@ async def process_message(message, db):
     global nodes
     for replica in range(0, int(os.getenv("REPLICATION_FACTOR", "3"))):
         replcation_algorithm: ReplicationAlgorithm = RoundRobinReplicationAlgorithm()
-        logger.info("pula")
         metadata["storage_node"] = replcation_algorithm.choose_node()
-        rr = (rr + 1) % len(nodes)
+        # rr = (rr + 1) % len(nodes)
         logger.info(f"Chosen storage node: {metadata['storage_node']}")
         metadata["status"] = "pending"
         metadata["stored_at"] = None
