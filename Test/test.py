@@ -9,8 +9,8 @@ import httpx
 from rich.console import Console
 from rich.table import Table
 
-FILEREC_URL = "http://172.30.6.13:8080"
-FILEDOWNLOADER_URL = "http://172.30.6.237:8000"
+FILEREC_URL = "http://172.30.6.80:8080"
+FILEDOWNLOADER_URL = "http://172.30.6.209:8000"
 STATUS_ENDPOINT_URL = f"{FILEDOWNLOADER_URL}/status"
 
 STORAGE_NODE_URLS = [
@@ -70,14 +70,12 @@ async def poll_for_status(client: httpx.AsyncClient, file_uuid: str) -> bool:
         try:
             response = await client.get(f"{STATUS_ENDPOINT_URL}/{file_uuid}")
             if response.status_code == 200:
-                console.log(f"[green]Ready:[/] Status OK for UUID {file_uuid}")
+                # console.log(f"[green]Ready:[/] Status OK for UUID {file_uuid}")
                 return True
             elif response.status_code == 404:
-                # This is expected while the file is processing
                 await asyncio.sleep(POLLING_INTERVAL_SECONDS)
                 continue
             else:
-                # Handle other unexpected status codes
                 console.log(
                     f"[bold red]Error polling for UUID {file_uuid}: Status {response.status_code}[/bold red]"
                 )
@@ -86,7 +84,6 @@ async def poll_for_status(client: httpx.AsyncClient, file_uuid: str) -> bool:
             console.log(
                 f"[bold red]RequestError while polling for UUID {file_uuid}: {e}[/bold red]"
             )
-            # Wait before retrying on connection errors
             await asyncio.sleep(POLLING_INTERVAL_SECONDS)
 
     console.log(
@@ -96,21 +93,27 @@ async def poll_for_status(client: httpx.AsyncClient, file_uuid: str) -> bool:
 
 
 async def benchmark_upload(
-    client: httpx.AsyncClient, file_paths: List[str]
-) -> Tuple[List[Dict], List[float]]:
+    client: httpx.AsyncClient, file_configs: List[Tuple[str, int]]
+) -> List[Dict]:
     """
-    Runs the end-to-end upload benchmark. The timer stops only after the
-    status endpoint confirms the file is processed and ready.
+    Runs the end-to-end upload benchmark.
+    Returns a list of dictionaries with per-file results.
     """
-    latencies = []
     upload_results = []
 
-    async def upload_and_poll(filepath: str):
+    async def upload_and_poll(filepath: str, size_kb: int):
         filename = os.path.basename(filepath)
-        start_time = time.monotonic()  # Start timer before anything happens
+        start_time = time.monotonic()
+        result = {
+            "filename": filename,
+            "size_kb": size_kb,
+            "status": "Failed",
+            "latency_s": None,
+            "uuid": None,
+            "error": "An unknown error occurred.",
+        }
 
         try:
-            # 1. Initial upload request
             with open(filepath, "rb") as f:
                 response = await client.post(
                     f"{FILEREC_URL}/upload",
@@ -125,68 +128,75 @@ async def benchmark_upload(
                 and isinstance(response_data, list)
                 and "file_uuid" in response_data[0]
             ):
-                console.log(
-                    f"[bold red]Upload failed for {filename}: Invalid response from upload endpoint.[/bold red]"
-                )
+                result["error"] = "Invalid response from upload endpoint."
+                upload_results.append(result)
                 return
 
             file_uuid = response_data[0]["file_uuid"]
-            console.log(
-                f"[cyan]Upload sent for {filename} (UUID: {file_uuid}). Now polling for ready status...[/cyan]"
-            )
+            result["uuid"] = file_uuid
 
-            # 2. Poll for status
             is_ready = await poll_for_status(client, file_uuid)
 
             if is_ready:
-                end_time = time.monotonic()  # Stop timer only after file is ready
-                latencies.append(end_time - start_time)
-                upload_results.append(response_data[0])
-            else:
-                # Polling failed (e.g., timed out)
-                console.log(
-                    f"[bold red]Processing failed for {filename} (UUID: {file_uuid}).[/bold red]"
+                end_time = time.monotonic()
+                result.update(
+                    {
+                        "status": "Success",
+                        "latency_s": end_time - start_time,
+                        "error": None,
+                    }
                 )
-
+            else:
+                result["error"] = (
+                    f"Polling timed out or failed after {POLLING_TIMEOUT_SECONDS}s."
+                )
         except httpx.HTTPStatusError as e:
-            console.log(
-                f"[bold red]Upload failed for {filename}: {e.response.status_code} {e.response.reason_phrase}[/bold red]"
+            result["error"] = (
+                f"HTTP Status {e.response.status_code} {e.response.reason_phrase}"
             )
         except httpx.RequestError as e:
-            console.log(
-                f"[bold red]Upload failed for {filename}: {type(e).__name__} - {e.request.url}[/bold red]"
-            )
+            result["error"] = f"{type(e).__name__} on URL {e.request.url}"
         except Exception as e:
-            console.log(
-                f"[bold red]An unexpected error occurred during upload of {filename}: {e}[/bold red]"
-            )
+            result["error"] = f"An unexpected error occurred: {e}"
+
+        upload_results.append(result)
 
     semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
 
-    async def task_with_semaphore(path: str):
+    async def task_with_semaphore(path: str, size: int):
         async with semaphore:
-            await upload_and_poll(path)
+            await upload_and_poll(path, size)
 
-    tasks = [task_with_semaphore(path) for path in file_paths]
+    tasks = [task_with_semaphore(path, size) for path, size in file_configs]
     await asyncio.gather(*tasks)
-    return upload_results, latencies
+    return upload_results
 
 
 async def benchmark_download(
     client: httpx.AsyncClient, uploaded_files: List[Dict], original_hashes: Dict
-) -> Tuple[List[float], int]:
-    """Runs the download benchmark and verifies file integrity."""
-    latencies = []
-    mismatched_hashes = 0
-
-    download_dir = os.path.join(BENCHMARK_DIR, "downloads")
-    os.makedirs(download_dir, exist_ok=True)
+) -> List[Dict]:
+    """
+    Runs the download benchmark and verifies file integrity.
+    Returns a list of dictionaries with per-file results.
+    """
+    download_results = []
 
     async def download_and_verify(file_info: Dict):
-        nonlocal mismatched_hashes
-        file_uuid = file_info.get("file_uuid")
+        file_uuid = file_info.get("uuid")
         original_filename = file_info.get("filename", "unknown_file")
+        result = {
+            "filename": original_filename,
+            "uuid": file_uuid,
+            "size_kb": file_info.get("size_kb"),  # Carry over size info
+            "status": "Failed",
+            "latency_s": None,
+            "integrity": "Not Checked",
+            "error": "An unknown error occurred",
+        }
+
         if not file_uuid:
+            result["error"] = "Missing file_uuid for download."
+            download_results.append(result)
             return
 
         try:
@@ -199,28 +209,30 @@ async def benchmark_download(
             response.raise_for_status()
             end_time = time.monotonic()
 
-            latencies.append(end_time - start_time)
-
             downloaded_content = await response.aread()
             downloaded_hash = hashlib.sha256(downloaded_content).hexdigest()
             original_hash = original_hashes.get(original_filename)
 
-            if downloaded_hash != original_hash:
-                mismatched_hashes += 1
-                console.log(f"[red]Hash mismatch[/red] for file {original_filename}")
+            integrity_check = "Passed" if downloaded_hash == original_hash else "Failed"
 
+            result.update(
+                {
+                    "status": "Success",
+                    "latency_s": end_time - start_time,
+                    "integrity": integrity_check,
+                    "error": None,
+                }
+            )
         except httpx.HTTPStatusError as e:
-            console.log(
-                f"[bold red]Download failed for UUID {file_uuid}: {e.response.status_code} {e.response.reason_phrase} on URL {e.request.url}[/bold red]"
+            result["error"] = (
+                f"HTTP Status {e.response.status_code} on URL {e.request.url}"
             )
         except httpx.RequestError as e:
-            console.log(
-                f"[bold red]Download failed for UUID {file_uuid}: {type(e).__name__} - {e.request.url}[/bold red]"
-            )
+            result["error"] = f"{type(e).__name__} on URL {e.request.url}"
         except Exception as e:
-            console.log(
-                f"[bold red]An unexpected error occurred during download of {file_uuid}: {e}[/bold red]"
-            )
+            result["error"] = f"An unexpected error occurred: {e}"
+
+        download_results.append(result)
 
     semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
 
@@ -230,7 +242,7 @@ async def benchmark_download(
 
     tasks = [task_with_semaphore(file_data) for file_data in uploaded_files]
     await asyncio.gather(*tasks)
-    return latencies, mismatched_hashes
+    return download_results
 
 
 def display_results(
@@ -241,10 +253,12 @@ def display_results(
     success_count: int,
     total_count: int,
 ):
-    """Displays benchmark results in a formatted table."""
-    table = Table(title=title, style="cyan")
-    table.add_column("Metric", style="bold magenta")
-    table.add_column("Value")
+    """Displays benchmark summary results in a formatted table."""
+    table = Table(
+        title=title, style="black", show_header=True, header_style="bold black"
+    )
+    table.add_column("Metric", style="bold black")
+    table.add_column("Value", justify="right")
 
     throughput = total_size_mb / total_time if total_time > 0 else 0
     success_rate = (success_count / total_count) * 100 if total_count > 0 else 0
@@ -265,16 +279,103 @@ def display_results(
     console.print(table)
 
 
+def display_per_file_results(title: str, results: List[Dict]):
+    """Displays per-file results in a detailed table."""
+    if not results:
+        return
+
+    is_download = "integrity" in results[0]
+    table = Table(
+        title=title, style="default", show_header=True, header_style="bold black"
+    )
+    table.add_column("Filename", style="cyan", no_wrap=True)
+    table.add_column("Status", justify="center")
+    if is_download:
+        table.add_column("Integrity", justify="center")
+    table.add_column("Latency (ms)", justify="right")
+    table.add_column("UUID", style="yellow", no_wrap=True)
+    table.add_column("Error", style="red")
+
+    for result in sorted(results, key=lambda r: r["size_kb"]):
+        status_style = "green" if result["status"] == "Success" else "red"
+        status = f"[{status_style}]{result['status']}[/]"
+        latency_ms = (
+            f"{result['latency_s'] * 1000:.2f}"
+            if result["latency_s"] is not None
+            else "N/A"
+        )
+        error_msg = result.get("error") or ""
+
+        row_data = [result["filename"], status]
+        if is_download:
+            integrity = result.get("integrity", "N/A")
+            integrity_style = (
+                "green"
+                if integrity == "Passed"
+                else "red"
+                if integrity == "Failed"
+                else "yellow"
+            )
+            row_data.append(f"[{integrity_style}]{integrity}[/]")
+        row_data.extend([latency_ms, result["uuid"] or "N/A", error_msg])
+        table.add_row(*row_data)
+
+    console.print(table)
+
+
+def display_category_results(title: str, all_results: List[Dict], configs: List[Dict]):
+    """Displays results aggregated by file size category."""
+    table = Table(
+        title=title, style="black", show_header=True, header_style="bold black"
+    )
+    table.add_column("Category (File Size)", justify="right")
+    table.add_column("Successful", justify="center")
+    table.add_column("Success Rate", justify="right")
+    table.add_column("Avg Latency (ms)", justify="right")
+    table.add_column("Min Latency (ms)", justify="right")
+    table.add_column("Max Latency (ms)", justify="right")
+
+    for config in configs:
+        size_kb = config["size_kb"]
+        total_count = config["count"]
+
+        category_results = [r for r in all_results if r.get("size_kb") == size_kb]
+        successful = [r for r in category_results if r["status"] == "Success"]
+
+        success_count = len(successful)
+        success_rate = (success_count / total_count) * 100 if total_count > 0 else 0
+
+        latencies_ms = [
+            r["latency_s"] * 1000 for r in successful if r["latency_s"] is not None
+        ]
+
+        avg_latency = (
+            f"{sum(latencies_ms) / len(latencies_ms):.2f}" if latencies_ms else "N/A"
+        )
+        min_latency = f"{min(latencies_ms):.2f}" if latencies_ms else "N/A"
+        max_latency = f"{max(latencies_ms):.2f}" if latencies_ms else "N/A"
+
+        size_str = f"{size_kb} KB" if size_kb < 1024 else f"{size_kb / 1024} MB"
+
+        table.add_row(
+            size_str,
+            f"{success_count}/{total_count}",
+            f"{success_rate:.2f}%",
+            avg_latency,
+            min_latency,
+            max_latency,
+        )
+    console.print(table)
+
+
 def display_system_status(title: str, status: Dict):
     """Displays system status."""
     if not status:
         return
-
     table = Table(title=title, style="green")
     table.add_column("Resource", style="bold blue")
     table.add_column("Usage (%)", justify="right")
     table.add_column("Details")
-
     table.add_row("CPU", f"{status['cpu']['usage_percent']:.2f}%", "")
     table.add_row(
         "RAM",
@@ -292,25 +393,26 @@ def display_system_status(title: str, status: Dict):
 async def main():
     """Orchestrates the entire benchmarking process."""
     console.rule("[bold]Initiating Distributed File System Benchmark[/bold]")
-
     console.log(f"Creating test files in '{BENCHMARK_DIR}' directory...")
     os.makedirs(BENCHMARK_DIR, exist_ok=True)
-    file_paths = []
-    total_size_bytes = 0
+
+    file_configs = []
     original_hashes = {}
+    total_file_count = sum(c["count"] for c in TEST_FILES_CONFIG)
+    total_size_bytes = 0
 
     for config in TEST_FILES_CONFIG:
         for i in range(config["count"]):
             filename = f"test_{config['size_kb']}kb_{i + 1}.bin"
             filepath = os.path.join(BENCHMARK_DIR, filename)
             await create_test_file(filepath, config["size_kb"])
-            file_paths.append(filepath)
-            total_size_bytes += config["size_kb"] * 1024
+            file_configs.append((filepath, config["size_kb"]))
             original_hashes[filename] = get_file_hash(filepath)
+            total_size_bytes += config["size_kb"] * 1024
 
     total_size_mb = total_size_bytes / (1024 * 1024)
     console.log(
-        f"{len(file_paths)} test files created, total size {total_size_mb:.2f} MB."
+        f"{len(file_configs)} test files created, total size {total_size_mb:.2f} MB."
     )
 
     async with httpx.AsyncClient() as client:
@@ -321,23 +423,27 @@ async def main():
         for i, status in enumerate(initial_statuses):
             display_system_status(f"Storage Node {i + 1} - Initial State", status)
 
-        # MODIFICATION: Changed title to reflect what is being measured
         console.rule("[bold]End-to-End Upload & Processing Benchmark[/bold]")
         start_upload_time = time.monotonic()
-        uploaded_files, upload_latencies = await benchmark_upload(client, file_paths)
+        upload_results = await benchmark_upload(client, file_configs)
         end_upload_time = time.monotonic()
 
-        # MODIFICATION: Changed title
+        successful_uploads = [r for r in upload_results if r["status"] == "Success"]
+
+        display_category_results(
+            "Upload & Processing Results by Category", upload_results, TEST_FILES_CONFIG
+        )
+        display_per_file_results("Upload", upload_results)
         display_results(
-            "Upload & Processing Results",
+            "Upload",
             total_time=end_upload_time - start_upload_time,
-            total_size_mb=total_size_mb,
-            latencies=upload_latencies,
-            success_count=len(upload_latencies),
-            total_count=len(file_paths),
+            total_size_mb=sum(r["size_kb"] for r in successful_uploads) / 1024,
+            latencies=[r["latency_s"] for r in successful_uploads],
+            success_count=len(successful_uploads),
+            total_count=total_file_count,
         )
 
-        if not uploaded_files:
+        if not successful_uploads:
             console.log(
                 "[bold red]No files were successfully processed. Skipping download test.[/bold red]"
             )
@@ -347,28 +453,36 @@ async def main():
 
         console.rule("[bold]Download Benchmark[/bold]")
         start_download_time = time.monotonic()
-        download_latencies, mismatched_hashes = await benchmark_download(
-            client, uploaded_files, original_hashes
+        download_results = await benchmark_download(
+            client, successful_uploads, original_hashes
         )
         end_download_time = time.monotonic()
 
-        display_results(
-            "Download Results",
-            total_time=end_download_time - start_download_time,
-            total_size_mb=total_size_mb if len(download_latencies) > 0 else 0,
-            latencies=download_latencies,
-            success_count=len(download_latencies),
-            total_count=len(uploaded_files),
+        successful_downloads = [r for r in download_results if r["status"] == "Success"]
+        mismatched_hashes = len(
+            [r for r in successful_downloads if r["integrity"] == "Failed"]
         )
+
+        display_category_results(
+            "Download Results by Category", download_results, TEST_FILES_CONFIG
+        )
+        display_per_file_results("Download", download_results)
+        display_results(
+            "Download",
+            total_time=end_download_time - start_download_time,
+            total_size_mb=sum(r["size_kb"] for r in successful_downloads) / 1024,
+            latencies=[r["latency_s"] for r in successful_downloads],
+            success_count=len(successful_downloads),
+            total_count=len(successful_uploads),
+        )
+
         if mismatched_hashes > 0:
             console.print(
                 f"[bold red]Warning: {mismatched_hashes} downloaded files had incorrect hashes![/bold red]"
             )
-        elif len(download_latencies) > 0 and len(download_latencies) == len(
-            uploaded_files
-        ):
+        elif successful_downloads and not mismatched_hashes:
             console.print(
-                "[bold green]File integrity check passed successfully![/bold green]"
+                "[bold green]File integrity check passed for all downloaded files![/bold green]"
             )
 
         console.rule("[bold]System Status After Test[/bold]")
